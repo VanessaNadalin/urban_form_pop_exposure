@@ -1,49 +1,80 @@
-# History files
-.Rhistory
-.Rapp.history
+# ---------------------------------------------------------------------------
+# Data files are not distributed in this repository. The pipeline writes into
+# data/raw_data/ and data/processed_data/; both stay empty here except for a
+# placeholder, so that a clean clone has the directory structure the scripts
+# expect. See README.md, "Data availability".
+# ---------------------------------------------------------------------------
+data/raw_data/*
+data/processed_data/*
+!data/raw_data/.gitkeep
+!data/processed_data/.gitkeep
 
-# Session Data files
+# output/ holds the final tables and figures. Its file types (.csv, .png,
+# .pdf, .html, .tex) are excluded everywhere else in this file, so it needs an
+# explicit carve-out at the end.
+!output/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# R
 .RData
 .RDataTmp
-
-# User-specific files
-.Ruserdata
-
-# Example code in package build process
-*-Ex.R
-
-# Output files from R CMD build
-/*.tar.gz
-
-# Output files from R CMD check
-/*.Rcheck/
-
-# RStudio files
+.Rhistory
+.Rapp.history
 .Rproj.user/
-
-# produced vignettes
-vignettes/*.html
-vignettes/*.pdf
-
-# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
+.Ruserdata
+*.Rproj
+*-Ex.R
+*.tar.gz
+*.Rcheck/
 .httr-oauth
-
-# knitr and R markdown default cache directories
 *_cache/
 /cache/
-
-# Temporary files created by R markdown
 *.utf8.md
 *.knit.md
-
-# R Environment Variables
 .Renviron
+rsconnect/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Large file types
+*.gdb/
+*.zip
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+*.csv
+*.xlsx
+*.xls
+
+# Keep these specific files (override the patterns above)
+!README.md
+# Stage 01's municipality-name -> IBGE-code lookup, a small input the stage
+# cannot run without (see 01_download_susceptibility_maps/making_suscep_national.md).
+!01_download_susceptibility_maps/suc_codemun.xlsx
+
+# Must come after the exclusion patterns above to override them.
+!output/**
 
 # pkgdown site
 docs/
 
 # translation temp files
 po/*~
-
-# RStudio Connect folder
-rsconnect/
