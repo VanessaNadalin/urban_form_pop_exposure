@@ -17,6 +17,10 @@ its own section (§6.6) and produces no exhibit in the paper.
 **Updated 2026-09-16** to remove result values — see below — and to reflect
 `MIN_POP_RISCO_2010 = 200`, 6f.1 and 6f.2.
 
+**Updated 2026-09-23** for Figure 1's exposure-density panels (§6.2b), the Figure 2 script now
+in use, `build_results_targets.R` as the last step of `00_run_all.R`, and the full validation
+run of stages 3–5 (§9).
+
 ## Result values are not in this file
 
 This document describes **what each script does and in what order**. It does not state counts,
@@ -111,7 +115,8 @@ stage 5  05_exhibits/  (this folder)                                        read
 | `data/processed_data/03_urban_footprint/metricas/metricas_municipio_2010_2022.csv` | stage 3, script 07 | Table 1, Figure 2 |
 | `data/processed_data/03_urban_footprint/crescimento_urbano/grade_growth_types_2010_2022.parquet` | stage 3, script 05 | Figure 1 |
 | `data/processed_data/04_regression/amostra_mun.csv` | stage 4, script 01 | Table 1 (sample cross-check only) |
-| `data/processed_data/04_regression/tables/dataset_regressao_municipio.csv` | stage 4, script 15 | Table 1, Figure 1, Figure 2 (sample) |
+| `data/processed_data/04_regression/tables/dataset_regressao_municipio.csv` | stage 4, script 15 | Table 1, Figure 1, Figure 2 (sample), appendix descriptives |
+| `data/processed_data/04_regression/tables/dataset_regressao_arranjo.csv` | stage 4, script 15 | appendix descriptives |
 | `data/processed_data/04_regression/model_objects_table2.rds` | stage 4, script 16 (`saveRDS` at `16_estimate_models.R:524–525`) | Table 2 / ED Tables, ED Figure |
 | `data/processed_data/03_urban_footprint/tabelas/diagnostico_legacy_proxy_tabela1a.csv` (optional, **not reproducible from this repository** — see §6.1) | a diagnostic script that is not part of this deposit | Table 1 (cross-check, §6.1) |
 
@@ -177,10 +182,32 @@ functional form of `g_alta` — a growth *rate* with a near-zero denominator —
 of the study population; the municipalities it drops have real population and real, small, risk
 population that belong in national totals.
 
-**Figure 2 uses the restricted sample** (decided 2026-09-10, 6c2), consistent with its own
-history: `results_used.md` describes it on the regression sample, not the full universe.
-`figure2_exposure_scatter.R:32` sets its own `MIN_POP_RISCO_2010` and must be kept equal to
-`16_estimate_models.R:201`.
+**Figure 2 no longer uses the `MIN_POP_RISCO_2010` sample — changed 2026-09-21 (researcher),
+reversing 6c2 (2026-09-10).** It now takes every municipality in
+`dataset_regressao_municipio.csv` and requires growth of at least `MIN_GROWTH_BOTH_TYPES = 200`
+people in **both** sprawl and compact cells.
+
+Why the reversal. The figure plots Δrisk/Δpop by growth type, and `pop_2010_risk_total` is not
+the denominator of anything on it — it is `g_alta`'s denominator, which is what the cut was
+built for in script 16. Restricting it left the ratios unstable: the script's own sweep
+(§11 of `figure2_exposure_scatter.R`) puts the unclipped fit at slope 0.052 under the old rule
+against 0.530 under the new one, with the entire difference produced by **three** municipalities
+whose growth in one type was under a hundred people. A threshold on period growth restricts the
+denominator that actually exists on the figure. The old rule also selected municipalities that
+were more exposed in 2010, which raised both medians (0.061/0.079 against roughly 0.042/0.066)
+relative to the study population.
+
+The value 200 is **not** selected by the data — G = 100 and G = 200 give 0.531 and 0.530, and
+results are flat from 100 to 500. It is set equal to the regressions' minimum-baseline magnitude
+so the two thresholds read as one convention, and the sweep is reported so the insensitivity is
+visible rather than asserted.
+
+Two consequences to carry into the manuscript. Figure 2's sample is no longer the same
+municipalities as Tables 1/2 — a descriptive figure and a regression need not share a sample,
+but the difference has to be stated rather than assumed away. And requiring growth in **both**
+types conditions on the outcome dimension: at G = 200, 54 municipalities are dropped for
+insufficient compact growth against 2 for sprawl. That is inherent to a paired comparison (the
+retired rule dropped 42 against 3), and it belongs in the figure's caption.
 
 **Figure 1's `em_amostra_regressao` flag follows Table 1**: it is a QGIS convenience filter, not
 a value that must sum to anything.
@@ -199,6 +226,7 @@ exception, by updating the targets, not by adjusting the code. The values come f
 |---|---|---|---|
 | Table 1 — levels (1a) and change/bar chart (1b) | IN DRAFT | `table1_population_by_growth_type.R` | `tabela1a_populacao_totais_tipo.csv`, `tabela1_populacao_risco_tipo.{csv,pdf,png}` |
 | Figure 1 — growth-type map layers | IN DRAFT | `figure1_growth_type_layers.R` | `figura1_camadas.{parquet,gpkg}` — **stays in `data/processed_data/03_urban_footprint/figuras/`** |
+| Figure 1 — exposure-density panels | **not yet in `results_used.md`; added 2026-09-23 on request** | `figure1_exposure_density_layers.R` | `exposure_density_layers.gpkg` — **stays in `data/processed_data/03_urban_footprint/figuras/`** |
 | Figure 2 — exposure scatter | IN DRAFT | `figure2_exposure_scatter.R` | `plot_pct_risk_sprawl_vs_compact_{pure,population}.{pdf,png}` |
 | Table 2 — main regressions | IN DRAFT | `table2_and_ed_tables.R` | `table2_main_municipalities.{html,tex,docx}` |
 | ED Table 2 — with/without mediators | PROMISED | `table2_and_ed_tables.R` | `ed_table2_mediators.{html,tex,docx}` |
@@ -207,6 +235,7 @@ exception, by updating the targets, not by adjusting the code. The values come f
 | ED Table 5 — interactions | PROMISED | `table2_and_ed_tables.R` | `ed_table5_interactions.{html,tex,docx}` |
 | ED Figure — standardized coefficients | PLANNED | `ed_figure_standardized_coefficients.R` | `ed_figure_standardized_coefficients.{pdf,png}` + `.csv` |
 | ED sensitivity — alternative threshold | PLANNED | `ed_sensitivity_leapfrog_threshold.R` | `ed_table_sensitivity_leapfrog_2000m.{html,tex}` |
+| Appendix — descriptive statistics | **not in `results_used.md`; added 2026-09-18 on request** | `ed_table_descriptive_statistics.R` | `ed_table_descriptives_{municipality,arrangement,categorical}.csv`, `ed_table_descriptives.md` |
 
 File names for Table 1 / Figures 1–2 are the existing ones (they are what `MIGRATION_PLAN.md`
 6d lists as "moving to `output/`"); the new tables get English names. Data *columns* inside
@@ -320,6 +349,29 @@ year per script 04's flags but never received a `tipo_crescimento` label from sc
 1 is illustrative and has no total to reproduce, so this blocks nothing; it is a script-04 /
 script-05 boundary inconsistency worth a look if anyone chases it. Not investigated.
 
+### 6.2b `figure1_exposure_density_layers.R` — Figure 1 exposure-density panels
+
+**Produces.** One cell-level layer for the population-at-risk panels added to Figure 1 on
+2026-09-23, symbolized by hand in QGIS next to the growth-type groups.
+
+**Reads.** `grade_growth_types_2010_2022.parquet` (the common grid plus urban flags and growth
+types); `metricas_municipio_2010_2022.csv` (consistency check only);
+`dataset_regressao_municipio.csv` (`em_amostra_regressao` flag only).
+
+**Does.** Adds `pop_risk_2010 = pop_2010_alocada × prop_suscept_total`,
+`pop_risk_2022 = populacao × prop_suscept_total` and `delta_pop_risk`, with the same
+area-weighted rule as stage-3 script 07 (6e). Also adds the same three per km² of cell area
+(`dens_risk_*`), since the grid mixes 200 m and 1 km cells, and `grupo_3tipos`. It changes no
+existing column. All cells of the processing universe are exported, so summing the layer does
+**not** give Table 1's totals; section 3 of the script sums only the urban, typed cells and
+compares them with script 07's municipal totals, warning if they differ by more than one person.
+
+**Writes.** `data/processed_data/03_urban_footprint/figuras/exposure_density_layers.gpkg`
+(the name is kept as first written so the QGIS project keeps finding it).
+
+**State.** Written 2026-09-23 (`a8f0a21`, renamed in `57f0458`); in `00_run_all.R` since then.
+Its consistency-check output from the 2026-09-23 run has not been reviewed yet.
+
 ### 6.3 `figure2_exposure_scatter.R` — Figure 2
 
 **Produces.** Scatter of the share of 2010–2022 growth going to high-susceptibility areas,
@@ -331,14 +383,16 @@ correlations, fitted slope).
 
 **Does.** Per municipality, `pct_risk_sprawl` = Δ risk population in sprawl cells / Δ total
 population in sprawl cells (likewise compact), deltas derived from the common-grid levels;
-restrict to the regression dataset **with the `MIN_POP_RISCO_2010` cut** (L86) and then to
-municipalities with positive growth in both types; clip to [0, 1]; plot; print statistics.
+restrict to the regression dataset (**no `pop_2010_risk_total` cut since 2026-09-21**) and then
+to municipalities with growth of at least `MIN_GROWTH_BOTH_TYPES` in both types; clip to [0, 1];
+plot; print statistics; then report the sample-definition sweep of §11.
 
-**Parameter, in code.** `MIN_POP_RISCO_2010 <- 200` at
-`figure2_exposure_scatter.R:32`, with the comment *"must match 16_estimate_models.R"*. It does
-(`16_estimate_models.R:201`). Both were `1000` until 2026-09-12; if either moves, both must.
-The value is printed into both subtitles (L220–221, L271–272), so the figure states its own
-sample rule.
+**Parameter, in code.** `MIN_GROWTH_BOTH_TYPES <- 200`, the minimum 2010–2022 growth in persons
+required in each of the two types. Since 2026-09-21 this replaces the figure's own
+`MIN_POP_RISCO_2010` declaration, so the figure and script 16 no longer share a threshold and
+are not required to move together. `RETIRED_MIN_POP_RISCO_2010` is kept solely so §11 can report
+the old rule as a comparison row; nothing in the figure's path reads it. The value is printed
+into both subtitles, so the figure states its own sample rule.
 
 **Writes.** `output/plot_pct_risk_sprawl_vs_compact_{pure,population}.{pdf,png}`.
 
@@ -431,7 +485,49 @@ was switched to `size`.
 t-statistic, so the script computes `max(abs(t_original - t_check))` and `warning()`s above
 1e-8. A failure there means an arithmetic bug, not a result.
 
-### 6.6 `ed_sensitivity_leapfrog_threshold.R` — ED sensitivity **[not written; scope to confirm]**
+### 6.6 `ed_table_descriptive_statistics.R` — appendix descriptive statistics
+
+**Added 2026-09-18 on the researcher's explicit request** (a new exhibit, not in the July
+`results_used.md` — `CLAUDE.md` rule 6).
+
+**Produces.** N, mean, SD, min, p25, median, p75 and max for every variable in Table 2's
+specification — the two outcomes, the two treatments and all controls — at both levels of
+analysis, in two blocks:
+
+- **A. Estimation sample** — the units the coefficients were computed on: the
+  `MIN_POP_RISCO_2010` cut, then listwise deletion over the column's own formula variables.
+- **B. Full sample** — every unit in `dataset_regressao_*.csv` before either restriction, so
+  the listwise loss is visible rather than implied.
+
+`regiao` and `urban_class` are factors and get category-frequency tables instead of moments.
+`pct_nao_constru_fora_alta_2010_q1`/`_q4` and `zero_area_2000` are 0/1 indicators and are
+flagged as such, since their "mean" is a proportion.
+
+**Reads.** `dataset_regressao_municipio.csv`, `dataset_regressao_arranjo.csv`,
+`model_objects_table2.rds`.
+
+**Estimates nothing** (6d). The fitted models are opened only to verify the reconstruction.
+
+**Five constructed variables are copied** from `16_estimate_models.R`'s `prep()` /
+`prep_0010()` — the three logs and the two treatment sums — because they are built in script 16
+rather than stored in the CSV. The copy is self-verifying: the script recomputes them on the
+estimation rows and compares every numeric variable's mean against the fitted model's own model
+frame to 1e-8, and compares N. A drifted copy fails that check loudly; the outputs are still
+written, but every row is marked `UNVERIFIED` and a `warning()` is raised.
+
+**Also checks** whether the four main columns are estimated on identical rows, by row content
+rather than by count — equal N does not mean the same units (§4.3). If they differ, the blocks
+use column (1)'s sample and the per-column N's are reported.
+
+**Outputs.** `ed_table_descriptives_municipality.csv`, `ed_table_descriptives_arrangement.csv`,
+`ed_table_descriptives_categorical.csv`, and `ed_table_descriptives.md` formatted for the
+appendix. Its headline rows flow into `manuscript/results_targets_v2.md` through
+`build_results_targets.R`'s "Appendix table — descriptive statistics" section; the full table is
+the exhibit itself.
+
+---
+
+### 6.7 `ed_sensitivity_leapfrog_threshold.R` — ED sensitivity **[not written; scope to confirm]**
 
 **Produces.** Table 2 re-estimated under an alternative classification threshold — `AUDIT.md` §2
 settled on the extension/leapfrog distance at **2,000 m instead of 1,000 m**
@@ -462,13 +558,16 @@ re-run before submission.
 **Verified by.** The main-pipeline outputs must be byte-identical with and without the
 parameterization at default values — the parameterization has to be a no-op by default.
 
-### 6.7 `00_run_all.R`
+### 6.8 `00_run_all.R`
 
-Sources the five written scripts, each in a clean environment, mirroring stage 4's own
-`00_run_all.R`: `table1_population_by_growth_type.R` → `figure1_growth_type_layers.R` →
-`figure2_exposure_scatter.R` → `table2_and_ed_tables.R` →
-`ed_figure_standardized_coefficients.R`. **Excludes** `ed_sensitivity_leapfrog_threshold.R` (a
-multi-hour cross-stage re-run, launched deliberately) and `robustness/`.
+Sources each script in a clean environment, mirroring stage 4's own `00_run_all.R`:
+`table1_population_by_growth_type.R` → `figure1_growth_type_layers.R` →
+`figure1_exposure_density_layers.R` → `figure2_exposure_scatter.R` →
+`table2_and_ed_tables.R` → `ed_figure_standardized_coefficients.R` →
+`ed_table_descriptive_statistics.R` → `build_results_targets.R`. The generator runs **last**, so
+it reads exhibit outputs that are all current (added to the chain 2026-09-23; before that it was
+run by hand). **Excludes** `ed_sensitivity_leapfrog_threshold.R` (a multi-hour cross-stage re-run,
+launched deliberately) and `robustness/`.
 
 Preconditions printed at the top: stages 3 and 4 have been run, so that
 `metricas_municipio_2010_2022.csv`, `dataset_regressao_municipio.csv` and
@@ -478,7 +577,7 @@ Preconditions printed at the top: stages 3 and 4 have been run, so that
 day: full clean run, all five scripts, zero errors, every per-script check agreeing with what
 each had produced standalone.
 
-### 6.8 `robustness/` — seven scripts, kept live, not part of the exhibit set
+### 6.9 `robustness/` — seven scripts, kept live, not part of the exhibit set
 
 | Script | Pre-Migrate name | What it does | Notes |
 |---|---|---|---|
@@ -560,6 +659,10 @@ output/
   ed_table4_horserace.*                         ED Table 4
   ed_table5_interactions.*                      ED Table 5
   ed_figure_standardized_coefficients.pdf/.png/.csv
+  ed_table_descriptives_municipality.csv        Appendix descriptives, municipality level
+  ed_table_descriptives_arrangement.csv         Appendix descriptives, arrangement level
+  ed_table_descriptives_categorical.csv         regiao / urban_class frequencies
+  ed_table_descriptives.md                      both levels, formatted for the appendix
   ed_table_sensitivity_leapfrog_2000m.*         (if the re-run is done)
 ```
 
@@ -612,17 +715,26 @@ holds the before/after; it is a writing task and nothing in the pipeline will fl
 | 5 | ED Figure (§6.5) | **Done** — `2cd937d`, `fde0896`; self-check exact, two rendering bugs fixed |
 | 6 | ED sensitivity (§6.6) | **Not written** — skipped 2026-09-11 (researcher's call); scope still open |
 | 7 | `robustness/` repointing (§6.8) | **Done** — `d8c0a2b`; six of seven confirmed against real data, `case_study.R` still unrun |
-| 8 | `00_run_all.R` (§6.7) | **Done** — `c853b5d`; confirmed end to end 2026-09-11 |
+| 8 | `00_run_all.R` (§6.8) | **Done** — `c853b5d`; confirmed end to end 2026-09-11 and again 2026-09-23. Since `599b5e9` it ends with `build_results_targets.R` |
+| 9 | Figure 1 exposure-density panels (§6.2b) | **Written** 2026-09-23; ran in the 2026-09-23 run; consistency-check output not yet reviewed |
+| 10 | `build_results_targets.R`'s Figure 2 block | **Fixed** 2026-09-23 (`130ee7f`): reads the figure's own `figure2_sample_variants.csv` instead of recomputing under the rule retired on 2026-09-21 |
+| 11 | Full validation run of stages 3–5 | **Done** 2026-09-23 — every exhibit regenerated; results stable against the previously recorded values (`MIGRATION_HISTORY.md` Part 2, 2026-09-23) |
 
 **Open for the researcher:**
 
 - The `requireNamespace()`/`install.packages()` guard on `outlier_diagnostics.R`'s
   `DescTools`/`moments` loads, now that the gap has caused a real failure.
-- Whether `16_estimate_models.R:201` and `figure2_exposure_scatter.R:32` should also read
-  `MIN_POP_RISCO_2010` from `00_setup.R` (§6.8). They still declare their own, at the same
-  value; `00_setup.R` now carries the canonical one, so there are three declarations that agree
-  today and could drift tomorrow. A one-line change each, on the estimation path — left for the
-  researcher to approve rather than made as part of a cleanup.
+- Whether `16_estimate_models.R:201` should also read `MIN_POP_RISCO_2010` from `00_setup.R`
+  (§6.8). It still declares its own, at the same value as the canonical one, so two declarations
+  agree today and could drift tomorrow. Figure 2 is no longer part of this: since 2026-09-21 it
+  uses `MIN_GROWTH_BOTH_TYPES`, a different threshold on a different quantity, and is not
+  expected to track script 16.
+- **The [0, 1] clip, untouched by the 2026-09-21 sample change.** About 17% of points still have
+  a negative compact ratio and are pulled to zero (59 of 338 at G = 200; the count is flat
+  across the whole sweep, 60/60/59/55/44). Those are municipalities where exposed population in
+  compact cells fell while those cells grew. Separately, the diagnostics block reports Pearson
+  on the unclipped ratios four lines from R² and the slope = 1 test on the clipped ones, which a
+  reader will take as one fit. Both need a decision; neither is a sample question.
 - Running the rewritten `minimum_population_filter.R` (§6.8) and `double_filter_pp80.R`, neither
   of which has been executed since the change.
 - ED sensitivity scope: which threshold, which windows, whether at all before submission.

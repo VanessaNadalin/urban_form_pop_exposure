@@ -21,6 +21,10 @@
 #     (item 6, skipped for now).
 #   - robustness/ -- seven scripts kept live but unnumbered, not part of the
 #     validated exhibit set and never promoted into results_used.md (6.8).
+#
+# The final step, build_results_targets.R, regenerates
+# manuscript/results_targets_v2.md from the outputs written above (added
+# 2026-09-23; before that it had to be run by hand after this script).
 # =============================================================================
 
 cat("\n", strrep("=", 70), "\n")
@@ -33,9 +37,14 @@ t0_total <- Sys.time()
 scripts <- c(
   "05_exhibits/table1_population_by_growth_type.R",
   "05_exhibits/figure1_growth_type_layers.R",
+  "05_exhibits/figure1_exposure_density_layers.R",
   "05_exhibits/figure2_exposure_scatter.R",
   "05_exhibits/table2_and_ed_tables.R",
-  "05_exhibits/ed_figure_standardized_coefficients.R"
+  "05_exhibits/ed_figure_standardized_coefficients.R",
+  "05_exhibits/ed_table_descriptive_statistics.R",
+  # Last, on purpose: it reads every exhibit output above and writes
+  # manuscript/results_targets_v2.md, so it must run once they are all current.
+  "05_exhibits/build_results_targets.R"
 )
 
 for (s in scripts) {

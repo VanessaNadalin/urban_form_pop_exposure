@@ -75,8 +75,7 @@ exception noted below for stage 01.
 ```r
 source("03_urban_footprint_and_growth_types/00_run_all.R")
 source("04_regression_dataset_and_models/00_run_all.R")
-source("05_exhibits/00_run_all.R")
-source("05_exhibits/build_results_targets.R")
+source("05_exhibits/00_run_all.R")   # ends by regenerating manuscript/results_targets_v2.md
 ```
 
 ```bash

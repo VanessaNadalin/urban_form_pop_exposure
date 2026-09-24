@@ -7,12 +7,37 @@
 # 1) Pure plot (no facets) - tests overall similarity
 # 2) Faceted by population size quartiles (pop_mun_2022 from regression dataset)
 #
-# Sample: the regression sample of 16_estimate_models.R, including its
-# pop_2010_risk_total > 200 restriction (MIN_POP_RISCO_2010 below; revised
-#         2026-09-12 from 1000, MIGRATION_PLAN.md 6e/6c1 -- originally decided
-# 2026-09-10 to keep Figure 2 on the same municipalities as Tables 1/2 --
-# MIGRATION_PLAN.md 6c2), then municipalities with positive 2010-2022 growth
-# in both sprawl and compact cells.
+# Sample (changed 2026-09-21, researcher): every municipality in
+# dataset_regressao_municipio.csv with growth of at least
+# MIN_GROWTH_BOTH_TYPES persons in BOTH sprawl and compact cells, 2010-2022.
+#
+# WHY THIS AND NOT pop_2010_risk_total > 200. This figure plots
+# delta_risk / delta_pop by growth type. pop_2010_risk_total is not the
+# denominator of anything shown here -- it is g_alta's denominator, which is
+# what the cut was designed for in 16_estimate_models.R. Restricting it left
+# the ratios unstable: section 11's sweep shows the unclipped fit at slope
+# 0.052 under the old rule against 0.530 under this one, with the whole
+# difference produced by three municipalities whose growth in one type was
+# under a hundred people. A threshold on period growth restricts the actual
+# denominator. The old rule also selected municipalities that were already
+# more exposed in 2010, raising both medians relative to the study population.
+#
+# The value 200 is NOT selected by the data: G = 100 and G = 200 give
+# essentially the same fit (0.531 vs 0.530), and the results are flat from 100
+# to 500. It is set equal to the regressions' minimum-baseline magnitude so the
+# two thresholds read as one convention. Section 11 reports the full sweep, and
+# the retired rule alongside it, so the insensitivity is visible.
+#
+# THIS REVERSES MIGRATION_PLAN.md 6c2 (decided 2026-09-10), which put Figure 2
+# on the same municipalities as Tables 1/2. A descriptive figure and a
+# regression need not share a sample, but the change is deliberate and is
+# recorded in 05_exhibits/pipeline_5.md, not left silent.
+#
+# NOTE: requiring growth in BOTH types conditions on the outcome dimension --
+# municipalities that grew almost entirely one way are excluded. At G = 200
+# that is 54 dropped for compact against 2 for sprawl. This is inherent to a
+# paired comparison (the retired rule dropped 42 against 3) and belongs in the
+# figure's caption rather than being left for a reader to discover.
 #
 # Input:  data/processed_data/03_urban_footprint/metricas/metricas_municipio_2010_2022.csv
 #         (MIGRATION_PLAN.md 6b0 common-grid rework, 2026-08-28 -- replaces the retired
@@ -29,7 +54,14 @@
 
 source("04_regression_dataset_and_models/00_setup.R")
 
-MIN_POP_RISCO_2010 <- 200  # must match 16_estimate_models.R (revised 2026-09-12, was 1000)
+# The figure's sample rule: minimum 2010-2022 growth, in persons, required in
+# BOTH sprawl and compact cells. See the header for why this replaced the
+# pop_2010_risk_total cut on 2026-09-21.
+MIN_GROWTH_BOTH_TYPES <- 200
+
+# The retired rule, kept only so section 11 can report it as a comparison row.
+# Nothing in the figure's own path reads it.
+RETIRED_MIN_POP_RISCO_2010 <- 200
 
 for (pkg in c("ggplot2", "dplyr", "scales"))
   if (!requireNamespace(pkg, quietly = TRUE)) install.packages(pkg)
@@ -82,13 +114,15 @@ cat(sprintf("   Regression dataset: %d rows × %d cols\n", nrow(df_reg), ncol(df
 # Same minimum-baseline restriction as 16_estimate_models.R, so the figure
 # and the regression tables describe the same municipalities.
 n_reg_all <- n_distinct(df_reg$cod_mun)
+# No pop_2010_risk_total restriction: the figure now uses every municipality in
+# the regression dataset, and the sample is decided by the growth threshold in
+# section 5 instead.
 df_reg_small <- df_reg %>%
-  filter(pop_2010_risk_total > MIN_POP_RISCO_2010) %>%
   select(cod_mun) %>%
   distinct()
 
-cat(sprintf("   Regression dataset: %d municipalities; after pop_2010_risk_total > %d: %d\n",
-            n_reg_all, MIN_POP_RISCO_2010, nrow(df_reg_small)))
+cat(sprintf("   Regression dataset: %d municipalities; no pop_2010_risk_total cut applied: %d\n",
+            n_reg_all, nrow(df_reg_small)))
 
 # =============================================================================
 # 3) DERIVE RATIOS
@@ -116,6 +150,12 @@ df <- df_raw %>%
     pop_mun_2022       = pop_2022_total
   )
 
+# Unrestricted copy, kept for the sample-definition variants in section 11.
+# Section 4 overwrites `df` with the inner join against the regression
+# municipalities, and section 11's retired-rule row needs the frame from
+# before that join. Nothing in the figure's own path reads df_all.
+df_all <- df
+
 # =============================================================================
 # 4) MERGE WITH REGRESSION DATASET (INNER JOIN - restrict to regression sample)
 # =============================================================================
@@ -132,16 +172,18 @@ cat(sprintf("   Regression municipalities: %d\n", nrow(df_reg_small)))
 cat(sprintf("   After inner join: %d\n", nrow(df)))
 
 # =============================================================================
-# 5) FILTER  (keep rows with BOTH denominators > 0)
+# 5) FILTER  (minimum growth in BOTH types -- this is the sample rule)
 # =============================================================================
 
-cat("\n4) Filtering for positive growth in both sprawl and compact...\n")
+cat(sprintf("\n4) Filtering for growth >= %d in both sprawl and compact...\n",
+            MIN_GROWTH_BOTH_TYPES))
 
 N_before <- nrow(df)
 
-df_plot <- df %>%
-  filter(!is.na(delta_sprawl_total),  delta_sprawl_total  > 0,
-         !is.na(delta_compact_total), delta_compact_total > 0)
+fail_compact <- is.na(df$delta_compact_total) | df$delta_compact_total < MIN_GROWTH_BOTH_TYPES
+fail_sprawl  <- is.na(df$delta_sprawl_total)  | df$delta_sprawl_total  < MIN_GROWTH_BOTH_TYPES
+
+df_plot <- df[!fail_compact & !fail_sprawl, , drop = FALSE]
 
 N_after   <- nrow(df_plot)
 N_dropped <- N_before - N_after
@@ -149,6 +191,10 @@ N_dropped <- N_before - N_after
 cat(sprintf("   N before growth filter: %d\n", N_before))
 cat(sprintf("   N after growth filter : %d (final sample)\n", N_after))
 cat(sprintf("   N dropped             : %d\n", N_dropped))
+cat(sprintf("     compact only: %d | sprawl only: %d | both: %d\n",
+            sum(fail_compact & !fail_sprawl),
+            sum(fail_sprawl & !fail_compact),
+            sum(fail_compact & fail_sprawl)))
 
 # =============================================================================
 # 6) CREATE POPULATION QUARTILES
@@ -217,8 +263,8 @@ p_pure <- ggplot(df_plot, aes(x = pct_risk_compact_cl, y = pct_risk_sprawl_cl)) 
   labs(
     title    = "Share of growth going to high-susceptibility areas: sprawl vs compact",
     subtitle = sprintf(
-      "Regression sample (pop_2010_risk_total > %d) with positive growth in both types  |  N = %d",
-      MIN_POP_RISCO_2010, N_after),
+      "Regression sample; growth of at least %d people in both types  |  N = %d",
+      MIN_GROWTH_BOTH_TYPES, N_after),
     x        = "Share of compact growth going to high-risk areas",
     y        = "Share of sprawl growth\ngoing to high-risk areas",
     caption  = "Dashed grey line: 45° reference (equal allocation). Red line: linear regression with 95% CI.\nProximity to 45° line indicates similar risk allocation between growth types."
@@ -268,8 +314,8 @@ p_pop <- ggplot(df_plot, aes(x = pct_risk_compact_cl, y = pct_risk_sprawl_cl)) +
   labs(
     title    = "Share of growth going to high-susceptibility areas: sprawl vs compact",
     subtitle = sprintf(
-      "Faceted by population quartiles (pop_mun_2022)  |  regression sample, pop_2010_risk_total > %d  |  N = %d",
-      MIN_POP_RISCO_2010, N_after),
+      "Faceted by population quartiles (pop_mun_2022)  |  growth >= %d in both types  |  N = %d",
+      MIN_GROWTH_BOTH_TYPES, N_after),
     x        = "Share of compact growth going to high-risk areas",
     y        = "Share of sprawl growth\ngoing to high-risk areas",
     caption  = "Dashed grey line: 45° reference (equal allocation). Red line: linear regression with 95% CI."
@@ -368,3 +414,261 @@ df_plot %>%
   print(n = Inf)
 
 cat("\nDone.\n")
+
+# =============================================================================
+# 11) SAMPLE-DEFINITION VARIANTS  (added 2026-09-21 on request)
+# =============================================================================
+#
+# Two ways of deciding which municipalities Figure 2 shows, reported side by
+# side. Nothing above this line is changed: variant (a) reuses `df_plot`, the
+# exact frame the figure was drawn from, so the reference row and the figure
+# cannot disagree.
+#
+#   (a) THE FIGURE -- the rule adopted 2026-09-21: no pop_2010_risk_total cut,
+#       growth >= MIN_GROWTH_BOTH_TYPES in both types.
+#   RETIRED -- the rule used until 2026-09-21: pop_2010_risk_total > 200, then
+#       growth > 0 in both types. Kept so the change stays auditable.
+#   (b) the same growth rule swept over G in (1, 100, 200, 500, 1000). The
+#       G = 200 row should reproduce row (a) exactly; if it does not, the
+#       figure's path and this block have diverged.
+#
+# ASSUMPTION, stated because it is a choice and not in the brief: variant (b)
+# still restricts to the municipalities of dataset_regressao_municipio.csv
+# (all of them, not the MIN_POP-restricted subset). Dropping the baseline cut
+# is not the same as abandoning the regression sample, and keeping the same
+# municipality universe is what isolates the effect of swapping one filter for
+# the other. Change REG_SET_B below to use df_all alone if the intent was to
+# leave that universe too.
+#
+# NOTHING IS CHOSEN HERE. The table is printed and written; which rule the
+# figure should use is a decision for the researcher.
+#
+# On the clip: every statistic below is computed on the UNCLIPPED ratios,
+# matching the existing diagnostics block, EXCEPT that the fitted line is
+# reported twice -- once unclipped and once on the [0,1]-clipped values the
+# existing script fits (L342) and the plot draws (L201, L251). The count of
+# points clipped on each axis is reported so the gap between the two fits can
+# be read against how many observations the clip moves.
+
+cat("\n", strrep("=", 74), "\n", sep = "")
+cat("11) SAMPLE-DEFINITION VARIANTS\n")
+cat(strrep("=", 74), "\n", sep = "")
+
+# The sweep. G = 200 is the figure's own rule, so that row must match row (a);
+# the others show how little the result moves between 100 and 500.
+G_VALUES <- c(1, 100, 200, 500, 1000)
+
+# Municipality universe for variant (b): every municipality in the regression
+# dataset, without the pop_2010_risk_total cut.
+REG_SET_B <- df_reg %>% select(cod_mun) %>% distinct()
+
+clip01 <- function(x) pmin(pmax(x, 0), 1)
+
+# One row of the comparison table. `d_join` is the metrics frame already
+# restricted to the variant's municipality universe; `keep` is the logical
+# vector of the growth filter, passed in so each variant can use its own rule.
+variant_row <- function(label, rule, n_metrics, d_join, keep, fail_c, fail_s) {
+  d <- d_join[keep, , drop = FALSE]
+  n <- nrow(d)
+
+  x  <- d$pct_risk_compact
+  y  <- d$pct_risk_sprawl
+  xc <- clip01(x)
+  yc <- clip01(y)
+
+  diff_pair <- x - y
+  wt <- tryCatch(
+    wilcox.test(x, y, paired = TRUE, exact = FALSE),
+    error = function(e) list(p.value = NA_real_)
+  )
+  fit_raw <- tryCatch(lm(y ~ x),   error = function(e) NULL)
+  fit_cl  <- tryCatch(lm(yc ~ xc), error = function(e) NULL)
+  cf <- function(f, i) if (is.null(f)) NA_real_ else unname(coef(f)[i])
+
+  data.frame(
+    variant                = label,
+    rule                   = rule,
+    n_metrics              = n_metrics,
+    n_in_universe          = nrow(d_join),
+    dropped_by_universe    = n_metrics - nrow(d_join),
+    n_final                = n,
+    dropped_by_growth      = nrow(d_join) - n,
+    dropped_compact_only   = sum(fail_c & !fail_s),
+    dropped_sprawl_only    = sum(fail_s & !fail_c),
+    dropped_both           = sum(fail_c & fail_s),
+    median_compact         = median(x, na.rm = TRUE),
+    median_sprawl          = median(y, na.rm = TRUE),
+    median_diff            = median(diff_pair, na.rm = TRUE),
+    share_below_45         = mean(diff_pair > 0, na.rm = TRUE),
+    wilcoxon_p             = wt$p.value,
+    slope_unclipped        = cf(fit_raw, 2),
+    intercept_unclipped    = cf(fit_raw, 1),
+    slope_clipped          = cf(fit_cl, 2),
+    intercept_clipped      = cf(fit_cl, 1),
+    clipped_x_at_0         = sum(!is.na(x) & x < 0),
+    clipped_x_at_1         = sum(!is.na(x) & x > 1),
+    clipped_y_at_0         = sum(!is.na(y) & y < 0),
+    clipped_y_at_1         = sum(!is.na(y) & y > 1),
+    stringsAsFactors = FALSE
+  )
+}
+
+N_METRICS <- nrow(df_all)
+
+# --- (a) reference: the frame the figure was actually drawn from -------------
+# df is the post-inner-join frame of section 4; df_plot is it after the
+# positive-growth filter of section 5. Recomputing the fail flags on df
+# reproduces that filter exactly (section 5).
+fail_c_a <- is.na(df$delta_compact_total) | df$delta_compact_total < MIN_GROWTH_BOTH_TYPES
+fail_s_a <- is.na(df$delta_sprawl_total)  | df$delta_sprawl_total  < MIN_GROWTH_BOTH_TYPES
+keep_a   <- !fail_c_a & !fail_s_a
+
+rows <- list(
+  variant_row(
+    label     = "(a) the figure",
+    rule      = sprintf("no pop_2010_risk_total cut; growth >= %d in both types",
+                        MIN_GROWTH_BOTH_TYPES),
+    n_metrics = N_METRICS,
+    d_join    = df,
+    keep      = keep_a,
+    fail_c    = fail_c_a,
+    fail_s    = fail_s_a
+  )
+)
+
+# Guard: row (a) must reproduce the figure's own N exactly.
+if (rows[[1]]$n_final != N_after)
+  warning("Row (a) recomputed N = ", rows[[1]]$n_final,
+          " but the figure was drawn on N = ", N_after,
+          ". The row does not reproduce the figure -- do not read the ",
+          "table until this is resolved.")
+
+# --- the retired rule, for comparison ----------------------------------------
+# What the figure showed until 2026-09-21. Reported so the change from one rule
+# to the other can be read off a single table rather than from two runs.
+retired_set <- df_reg %>%
+  filter(pop_2010_risk_total > RETIRED_MIN_POP_RISCO_2010) %>%
+  select(cod_mun) %>%
+  distinct()
+df_ret   <- df_all %>% inner_join(retired_set, by = "cod_mun")
+fail_c_r <- is.na(df_ret$delta_compact_total) | df_ret$delta_compact_total <= 0
+fail_s_r <- is.na(df_ret$delta_sprawl_total)  | df_ret$delta_sprawl_total  <= 0
+
+rows[[length(rows) + 1L]] <- variant_row(
+  label     = "retired rule",
+  rule      = sprintf("pop_2010_risk_total > %d, then growth > 0 in both types (until 2026-09-21)",
+                      RETIRED_MIN_POP_RISCO_2010),
+  n_metrics = N_METRICS,
+  d_join    = df_ret,
+  keep      = !fail_c_r & !fail_s_r,
+  fail_c    = fail_c_r,
+  fail_s    = fail_s_r
+)
+
+# --- (b) no baseline cut; growth >= G in both types --------------------------
+df_b <- df_all %>% inner_join(REG_SET_B, by = "cod_mun")
+
+for (g in G_VALUES) {
+  fail_c <- is.na(df_b$delta_compact_total) | df_b$delta_compact_total < g
+  fail_s <- is.na(df_b$delta_sprawl_total)  | df_b$delta_sprawl_total  < g
+  rows[[length(rows) + 1L]] <- variant_row(
+    label     = sprintf("(b) G = %d", g),
+    rule      = sprintf("no pop_2010_risk_total cut; growth >= %d in both types", g),
+    n_metrics = N_METRICS,
+    d_join    = df_b,
+    keep      = !fail_c & !fail_s,
+    fail_c    = fail_c,
+    fail_s    = fail_s
+  )
+}
+
+variants <- do.call(rbind, rows)
+
+# --- Print -------------------------------------------------------------------
+
+show_cols <- function(cols, title) {
+  cat(sprintf("\n%s\n", title))
+  d <- variants[, c("variant", cols), drop = FALSE]
+  num <- vapply(d, is.numeric, logical(1))
+  d[num] <- lapply(d[num], function(v) ifelse(abs(v) >= 1 | v == 0, round(v, 3), signif(v, 3)))
+  print(d, row.names = FALSE)
+}
+
+cat("\nRules:\n")
+for (i in seq_len(nrow(variants)))
+  cat(sprintf("  %-14s %s\n", variants$variant[i], variants$rule[i]))
+
+show_cols(c("n_metrics", "n_in_universe", "dropped_by_universe",
+            "n_final", "dropped_by_growth",
+            "dropped_compact_only", "dropped_sprawl_only", "dropped_both"),
+          "Sample and attrition:")
+
+show_cols(c("n_final", "median_compact", "median_sprawl", "median_diff",
+            "share_below_45", "wilcoxon_p"),
+          "Distribution (unclipped ratios):")
+
+show_cols(c("slope_unclipped", "intercept_unclipped",
+            "slope_clipped", "intercept_clipped"),
+          "Fitted line, unclipped vs [0,1]-clipped:")
+
+show_cols(c("clipped_x_at_0", "clipped_x_at_1", "clipped_y_at_0", "clipped_y_at_1"),
+          "Points moved by the clip (x = compact, y = sprawl):")
+
+# --- Write -------------------------------------------------------------------
+
+out_var <- output_path("figure2_sample_variants.csv")
+readr::write_csv(variants, out_var)
+cat(sprintf("\n   Saved: %s\n", out_var))
+
+# Pure plot for each variant (b). Variant (a)'s plots are the ones the existing
+# code already wrote above, under their existing names, unchanged.
+for (g in G_VALUES) {
+  fail_c <- is.na(df_b$delta_compact_total) | df_b$delta_compact_total < g
+  fail_s <- is.na(df_b$delta_sprawl_total)  | df_b$delta_sprawl_total  < g
+  d_g <- df_b[!fail_c & !fail_s, , drop = FALSE] %>%
+    mutate(pct_risk_sprawl_cl  = clip01(pct_risk_sprawl),
+           pct_risk_compact_cl = clip01(pct_risk_compact))
+
+  p_g <- ggplot(d_g, aes(x = pct_risk_compact_cl, y = pct_risk_sprawl_cl)) +
+    geom_abline(slope = 1, intercept = 0,
+                linetype = "dashed", colour = "grey50", linewidth = 0.8) +
+    geom_point(aes(size = growth_total), colour = "#4878CF", alpha = 0.4) +
+    geom_smooth(method = "lm", se = TRUE,
+                colour = "#E63946", fill = "#E63946", linewidth = 1.0, alpha = 0.15) +
+    scale_size_continuous(
+      range  = c(0.5, 6),
+      name   = "Total growth\n(pop, 2010-2022)",
+      labels = label_number(scale_cut = cut_short_scale())
+    ) +
+    scale_x_continuous(labels = label_percent(accuracy = 1),
+                       limits = c(0, 1), expand = expansion(mult = 0.02)) +
+    scale_y_continuous(labels = label_percent(accuracy = 1),
+                       limits = c(0, 1), expand = expansion(mult = 0.02)) +
+    coord_equal() +
+    labs(
+      title    = "Share of growth going to high-susceptibility areas: sprawl vs compact",
+      subtitle = sprintf(
+        "VARIANT (b): no pop_2010_risk_total cut; growth >= %d in both types  |  N = %d",
+        g, nrow(d_g)),
+      x        = "Share of compact growth going to high-risk areas",
+      y        = "Share of sprawl growth\ngoing to high-risk areas",
+      caption  = "Dashed grey line: 45 degree reference (equal allocation). Red line: linear regression with 95% CI."
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position  = "right",
+      panel.grid.minor = element_blank(),
+      plot.caption     = element_text(hjust = 0, size = 8, colour = "grey40"),
+      plot.subtitle    = element_text(size = 9, colour = "grey30"),
+      aspect.ratio     = 1
+    )
+
+  f_pdf <- output_path(sprintf("plot_pct_risk_sprawl_vs_compact_pure_minGrowth%d.pdf", g))
+  f_png <- output_path(sprintf("plot_pct_risk_sprawl_vs_compact_pure_minGrowth%d.png", g))
+  ggsave(f_pdf, p_g, width = 7.5, height = 7, dpi = 300)
+  ggsave(f_png, p_g, width = 7.5, height = 7, dpi = 300)
+  cat(sprintf("   Saved: %s\n", f_pdf))
+  cat(sprintf("   Saved: %s\n", f_png))
+}
+
+cat("\nVariants done. No rule is chosen here.\n")

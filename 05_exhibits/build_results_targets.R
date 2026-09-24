@@ -190,8 +190,16 @@ reg_input("s05_tab1b", output_path("tabela1_populacao_risco_tipo.csv"),
           "Table 1b (table1_population_by_growth_type.R)", rank = "downstream")
 reg_input("s05_edfig", output_path("ed_figure_standardized_coefficients.csv"),
           "ED Figure standardized betas (ed_figure_standardized_coefficients.R)", rank = "downstream")
+reg_input("s05_fig2_variants", output_path("figure2_sample_variants.csv"),
+          "Figure 2 statistics, row '(a) the figure' (figure2_exposure_scatter.R)", rank = "downstream")
 reg_input("s05_fig1_layers", file.path(stage03_proc_dir, "figuras", "figura1_camadas.parquet"),
           "Figure 1 layers (figure1_growth_type_layers.R)", rank = "downstream")
+reg_input("s05_desc_mun", output_path("ed_table_descriptives_municipality.csv"),
+          "Appendix descriptives, municipality level (ed_table_descriptive_statistics.R)",
+          rank = "downstream")
+reg_input("s05_desc_arr", output_path("ed_table_descriptives_arrangement.csv"),
+          "Appendix descriptives, arrangement level (ed_table_descriptive_statistics.R)",
+          rank = "downstream")
 
 # ---- robustness --------------------------------------------------------------
 reg_input("rb_sensitivity", file.path(figures_dir, "sensitivity_min_pop_risco.csv"),
@@ -461,7 +469,8 @@ SEC <- list(
   ed5     = "ED Table 5 — interactions",
   edfig   = "ED Figure — standardized coefficients",
   cover   = "Stage 02 / stage 03 coverage",
-  robust  = "Robustness — minimum-baseline sweep"
+  robust  = "Robustness — minimum-baseline sweep",
+  desc    = "Appendix table — descriptive statistics"
 )
 
 # ---- 6.1 Sample funnel -------------------------------------------------------
@@ -757,33 +766,96 @@ if (is.na(fig1_key)) {
   })
 }
 
-# ---- 6.4 Figure 2 (recomputed) ----------------------------------------------
-# figure2_exposure_scatter.R prints every statistic below to console and writes
-# no CSV. Recomputed here with the same construction, the same two filters in
-# the same order, and the same estimators (§3-§5 and §10 of that script).
+# ---- 6.4 Figure 2 (read from the exhibit's own CSV) ------------------------
+# figure2_exposure_scatter.R writes output/figure2_sample_variants.csv. Its row
+# "(a) the figure" is computed on the exact frame the figure is drawn from, so
+# N, the growth-filter breakdown, the medians, the share below 45°, the Wilcoxon
+# p and both fitted lines are READ from it (sourcing rule 1). An earlier version
+# of this block recomputed everything here under its own copy of the sample
+# rule. When f8def75 (2026-09-21) changed the figure's rule, that copy was not
+# updated, and the 2026-09-23 file reported statistics for the retired rule.
+# Reading the exhibit's CSV removes that failure mode.
+#
+# The CSV does not carry Pearson, Spearman, the slope's SE or R², which the
+# script prints to console only. Those four are recomputed here on the same
+# municipalities: the growth threshold is parsed from the row's own `rule`
+# text rather than copied as a constant. They are reported only if the
+# recomputed frame reproduces the row's N and clipped slope; otherwise they are
+# PENDING.
 
-f2_items <- list("Metrics municipalities (before any filter)",
-                 "Filter 1 — after pop_2010_risk_total > MIN_POP_RISCO_2010",
-                 "Filter 2 — after positive growth in both types (final N)",
-                 "Dropped by filter 2",
+f2_items <- list("Sample rule",
+                 "Metrics municipalities (before any filter)",
+                 "Regression-dataset municipalities with metrics",
+                 "Final N (growth threshold met in both types)",
+                 "Dropped by the growth threshold",
+                 "Dropped — compact only / sprawl only / both",
                  "Median pct_risk_compact", "Median pct_risk_sprawl",
                  "Median difference (compact − sprawl)",
                  "Share below 45° line (compact > sprawl)",
-                 "Wilcoxon signed-rank p", "Pearson correlation", "Spearman correlation",
-                 "Fitted slope", "Fitted slope SE", "Fitted intercept", "Fitted R²")
+                 "Wilcoxon signed-rank p",
+                 "Fitted slope (clipped, the plotted line)", "Fitted intercept (clipped)",
+                 "Fitted slope (unclipped)",
+                 "Pearson correlation", "Spearman correlation",
+                 "Fitted slope SE (clipped)", "Fitted R² (clipped)")
 
-guarded(SEC$f2, c("s03_metricas_mun", "s04_ds_mun"), f2_items, function() {
+guarded(SEC$f2, c("s05_fig2_variants"), f2_items, function() {
+  var <- readr::read_csv(inp_path("s05_fig2_variants"), show_col_types = FALSE, progress = FALSE)
+  row <- var[var$variant == "(a) the figure", , drop = FALSE]
+  if (nrow(row) != 1)
+    stop(sprintf("expected exactly one row with variant == '(a) the figure' in %s, found %d",
+                 rel_path(inp_path("s05_fig2_variants")), nrow(row)))
+
+  src <- "s05_fig2_variants"
+  row_note <- "row '(a) the figure' of the exhibit's own CSV"
+
+  add(SEC$f2, "Sample rule", row$rule, src,
+      changed_by = "decided 2026-09-21 (f8def75), reverses 6c2",
+      note = row_note)
+  add(SEC$f2, "Metrics municipalities (before any filter)", n_fmt(row$n_metrics), src, note = row_note)
+  add(SEC$f2, "Regression-dataset municipalities with metrics", n_fmt(row$n_in_universe), src,
+      note = row_note)
+  add(SEC$f2, "Final N (growth threshold met in both types)", n_fmt(row$n_final), src,
+      july = "341 (results_used.md L50, '43% of 341 cities')",
+      changed_by = "6b0, 6e, sample rule of 2026-09-21",
+      note = paste(row_note, "; this is the N printed in both subtitles"))
+  add(SEC$f2, "Dropped by the growth threshold", n_fmt(row$dropped_by_growth), src, note = row_note)
+  add(SEC$f2, "Dropped — compact only / sprawl only / both",
+      sprintf("%s / %s / %s", n_fmt(row$dropped_compact_only), n_fmt(row$dropped_sprawl_only),
+              n_fmt(row$dropped_both)), src,
+      note = paste(row_note, "; requiring growth in both types excludes municipalities that grew almost entirely one way"))
+  add(SEC$f2, "Median pct_risk_compact", pct1(100 * row$median_compact), src,
+      july = "18.2%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = row_note)
+  add(SEC$f2, "Median pct_risk_sprawl", pct1(100 * row$median_sprawl), src,
+      july = "20.9%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = row_note)
+  add(SEC$f2, "Median difference (compact − sprawl)", f3(row$median_diff), src, note = row_note)
+  add(SEC$f2, "Share below 45° line (compact > sprawl)", pct1(100 * row$share_below_45), src,
+      july = "43%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = row_note)
+  add(SEC$f2, "Wilcoxon signed-rank p", f4(row$wilcoxon_p), src,
+      status = if (is.na(row$wilcoxon_p)) "PENDING" else "VERIFIED", note = row_note)
+  add(SEC$f2, "Fitted slope (clipped, the plotted line)", f3(row$slope_clipped), src,
+      july = "slope < 45° with positive intercept (no value stated)",
+      changed_by = "6b0, 6e, sample rule of 2026-09-21",
+      note = paste(row_note, "; fitted on the [0,1]-clipped variables, as drawn"))
+  add(SEC$f2, "Fitted intercept (clipped)", f3(row$intercept_clipped), src, note = row_note)
+  add(SEC$f2, "Fitted slope (unclipped)", f3(row$slope_unclipped), src,
+      note = paste(row_note, "; the [0,1] clip is an open decision (pipeline_5.md §9)"))
+
+  # --- the four console-only statistics, recomputed and checked --------------
+  recomputed <- c("Pearson correlation", "Spearman correlation",
+                  "Fitted slope SE (clipped)", "Fitted R² (clipped)")
+  prob <- unlist(lapply(c("s03_metricas_mun", "s04_ds_mun"), input_problem))
+  g <- suppressWarnings(as.numeric(sub(".*growth >= ([0-9]+).*", "\\1", row$rule)))
+  if (length(prob) > 0 || is.na(g)) {
+    reason <- if (length(prob) > 0) paste(unique(prob), collapse = "; ")
+              else sprintf("could not parse the growth threshold from the rule text '%s'", row$rule)
+    for (it in recomputed) pending(SEC$f2, it, reason)
+    return(invisible(NULL))
+  }
+
   met <- readr::read_csv(inp_path("s03_metricas_mun"), show_col_types = FALSE, progress = FALSE)
   reg <- readr::read_csv(inp_path("s04_ds_mun"),       show_col_types = FALSE, progress = FALSE)
 
-  tipos <- c("extension", "leapfrog", "peripheral", "densification", "infill")
-  needed <- c(paste0("pop_2022_", tipos), paste0("pop_2010_", tipos),
-              paste0("pop_2022_risk_", tipos), paste0("pop_2010_risk_", tipos))
-  miss <- setdiff(needed, names(met))
-  if (length(miss) > 0) stop(sprintf("metricas_municipio missing: %s", paste(miss, collapse = ", ")))
-
-  src_note <- "recomputed here, not read from an exhibit output; mirrors `figure2_exposure_scatter.R` §3–§5 and §10"
-
+  # Same construction as figure2_exposure_scatter.R §3-§5.
   df <- met %>% mutate(
     delta_sprawl_risk  = (pop_2022_risk_extension - pop_2010_risk_extension) +
                          (pop_2022_risk_leapfrog  - pop_2010_risk_leapfrog) +
@@ -797,80 +869,50 @@ guarded(SEC$f2, c("s03_metricas_mun", "s04_ds_mun"), f2_items, function() {
                          (pop_2022_infill        - pop_2010_infill),
     pct_risk_sprawl  = delta_sprawl_risk  / delta_sprawl_total,
     pct_risk_compact = delta_compact_risk / delta_compact_total
-  )
-  n_metrics <- nrow(df)
+  ) %>%
+    mutate(cod_mun = as.character(cod_mun)) %>%
+    inner_join(reg %>% transmute(cod_mun = as.character(cod_mun)) %>% distinct(), by = "cod_mun")
 
-  # Filter 1: the MIN_POP_RISCO_2010 cut, on the regression dataset's own column.
-  reg_small <- reg %>% filter(pop_2010_risk_total > MIN_POP_RISCO_2010) %>%
-    select(cod_mun) %>% distinct()
-  df1 <- df %>% mutate(cod_mun = as.character(cod_mun)) %>%
-    inner_join(reg_small %>% mutate(cod_mun = as.character(cod_mun)), by = "cod_mun")
+  keep <- !is.na(df$delta_compact_total) & df$delta_compact_total >= g &
+          !is.na(df$delta_sprawl_total)  & df$delta_sprawl_total  >= g
+  d <- df[keep, , drop = FALSE] %>%
+    mutate(pct_risk_sprawl_cl  = pmin(pmax(pct_risk_sprawl, 0), 1),
+           pct_risk_compact_cl = pmin(pmax(pct_risk_compact, 0), 1))
 
-  # Filter 2: positive growth in BOTH types.
-  df2 <- df1 %>% filter(!is.na(delta_sprawl_total),  delta_sprawl_total  > 0,
-                        !is.na(delta_compact_total), delta_compact_total > 0)
+  lmf <- tryCatch(lm(pct_risk_sprawl_cl ~ pct_risk_compact_cl, data = d), error = function(e) NULL)
+  mismatch <- if (nrow(d) != row$n_final)
+    sprintf("recomputed N = %d does not match the CSV's n_final = %d", nrow(d), row$n_final)
+  else if (is.null(lmf) || abs(unname(coef(lmf)[2]) - row$slope_clipped) > 1e-8)
+    "recomputed clipped slope does not match the CSV's slope_clipped"
+  else NULL
+  if (!is.null(mismatch)) {
+    for (it in recomputed)
+      pending(SEC$f2, it, paste(mismatch, "-- this block no longer reproduces the figure's frame"))
+    return(invisible(NULL))
+  }
 
   two_files <- sprintf("`%s` (%s) + `%s` (%s)",
                        rel_path(inp_path("s03_metricas_mun")), fmt_mtime(inp_mtime("s03_metricas_mun")),
                        rel_path(inp_path("s04_ds_mun")),       fmt_mtime(inp_mtime("s04_ds_mun")))
+  rc_note <- sprintf(paste("recomputed here (the CSV does not carry it) on growth >= %d in both types;",
+                           "checked against the CSV's N and clipped slope"), g)
 
-  add(SEC$f2, "Metrics municipalities (before any filter)", n_fmt(n_metrics),
-      source_label = two_files, note = src_note)
-  add(SEC$f2, "Filter 1 — after pop_2010_risk_total > MIN_POP_RISCO_2010", n_fmt(nrow(df1)),
-      source_label = two_files,
-      changed_by = sprintf("6c1 revised 2026-09-12; cut = %s", MIN_POP_RISCO_2010),
-      note = paste(src_note, "; `figure2_exposure_scatter.R:86`"))
-  add(SEC$f2, "Filter 2 — after positive growth in both types (final N)", n_fmt(nrow(df2)),
-      source_label = two_files, july = "341 (results_used.md L50, '43% of 341 cities')",
-      changed_by = "6b0, 6c1, 6e", note = paste(src_note, "; this is the N printed in both subtitles"))
-  add(SEC$f2, "Dropped by filter 2", n_fmt(nrow(df1) - nrow(df2)),
-      source_label = two_files, note = src_note)
-
-  if (nrow(df2) == 0) stop("no rows survive Figure 2's two filters")
-
-  dpair <- df2$pct_risk_compact - df2$pct_risk_sprawl
-  add(SEC$f2, "Median pct_risk_compact", pct1(100 * median(df2$pct_risk_compact, na.rm = TRUE)),
-      source_label = two_files, july = "18.2%", changed_by = "6b0, 6c1, 6e", note = src_note)
-  add(SEC$f2, "Median pct_risk_sprawl", pct1(100 * median(df2$pct_risk_sprawl, na.rm = TRUE)),
-      source_label = two_files, july = "20.9%", changed_by = "6b0, 6c1, 6e", note = src_note)
-  add(SEC$f2, "Median difference (compact − sprawl)", f3(median(dpair, na.rm = TRUE)),
-      source_label = two_files, note = src_note)
-  add(SEC$f2, "Share below 45° line (compact > sprawl)", pct1(100 * mean(dpair > 0, na.rm = TRUE)),
-      source_label = two_files, july = "43%", changed_by = "6b0, 6c1, 6e", note = src_note)
-
-  wt <- tryCatch(wilcox.test(df2$pct_risk_compact, df2$pct_risk_sprawl, paired = TRUE, exact = FALSE),
+  cp <- tryCatch(cor.test(d$pct_risk_sprawl, d$pct_risk_compact, method = "pearson"),
                  error = function(e) NULL)
-  add(SEC$f2, "Wilcoxon signed-rank p", if (is.null(wt)) NA_character_ else f4(wt$p.value),
-      source_label = two_files, status = if (is.null(wt)) "PENDING" else "VERIFIED", note = src_note)
-
-  cp <- tryCatch(cor.test(df2$pct_risk_sprawl, df2$pct_risk_compact, method = "pearson",
-                          use = "complete.obs"), error = function(e) NULL)
-  cs <- tryCatch(suppressWarnings(cor.test(df2$pct_risk_sprawl, df2$pct_risk_compact,
-                                           method = "spearman", use = "complete.obs")),
+  cs <- tryCatch(suppressWarnings(cor.test(d$pct_risk_sprawl, d$pct_risk_compact, method = "spearman")),
                  error = function(e) NULL)
   add(SEC$f2, "Pearson correlation",
       if (is.null(cp)) NA_character_ else sprintf("%s (p = %s)", f3(cp$estimate), f4(cp$p.value)),
-      source_label = two_files, status = if (is.null(cp)) "PENDING" else "VERIFIED", note = src_note)
+      source_label = two_files, status = if (is.null(cp)) "PENDING" else "VERIFIED",
+      note = paste(rc_note, "; on the unclipped ratios, as the script prints it"))
   add(SEC$f2, "Spearman correlation",
       if (is.null(cs)) NA_character_ else sprintf("%s (p = %s)", f3(cs$estimate), f4(cs$p.value)),
-      source_label = two_files, status = if (is.null(cs)) "PENDING" else "VERIFIED", note = src_note)
-
-  # Slope is fitted on the CLIPPED variables, as the exhibit script does.
-  df2 <- df2 %>% mutate(pct_risk_sprawl_cl  = pmin(pmax(pct_risk_sprawl, 0), 1),
-                        pct_risk_compact_cl = pmin(pmax(pct_risk_compact, 0), 1))
-  lmf <- tryCatch(lm(pct_risk_sprawl_cl ~ pct_risk_compact_cl, data = df2), error = function(e) NULL)
-  if (is.null(lmf)) {
-    for (it in c("Fitted slope", "Fitted slope SE", "Fitted intercept", "Fitted R²"))
-      pending(SEC$f2, it, "linear fit failed")
-  } else {
-    sm <- summary(lmf)
-    add(SEC$f2, "Fitted slope", f3(coef(lmf)[2]), source_label = two_files,
-        july = "slope < 45° with positive intercept (no value stated)",
-        changed_by = "6b0, 6c1, 6e", note = paste(src_note, "; fitted on the [0,1]-clipped variables"))
-    add(SEC$f2, "Fitted slope SE", f3(sm$coefficients[2, 2]), source_label = two_files, note = src_note)
-    add(SEC$f2, "Fitted intercept", f3(coef(lmf)[1]), source_label = two_files, note = src_note)
-    add(SEC$f2, "Fitted R²", f3(sm$r.squared), source_label = two_files, note = src_note)
-  }
+      source_label = two_files, status = if (is.null(cs)) "PENDING" else "VERIFIED",
+      note = paste(rc_note, "; on the unclipped ratios, as the script prints it"))
+  sm <- summary(lmf)
+  add(SEC$f2, "Fitted slope SE (clipped)", f3(sm$coefficients[2, 2]),
+      source_label = two_files, note = rc_note)
+  add(SEC$f2, "Fitted R² (clipped)", f3(sm$r.squared), source_label = two_files, note = rc_note)
 })
 
 # ---- 6.5 Table 2 / ED Tables 2-5 --------------------------------------------
@@ -939,11 +981,11 @@ if (is.null(models_problem) && !is.null(model_objects)) {
 
   add(SEC$ed3, "N (reconciliation)",
       n_fmt(model_n(model_objects$tab_appA_arr[[1]])), "s04_models",
-      july = "206 (results_used.md L81); CLAUDE.md L151–155 carries 202 from VERIFICATION.md A2",
+      july = "206 (results_used.md L81); VERIFICATION.md A2 found 202",
       changed_by = "6b0, 6c1, 6f.1/6f.2",
-      note = paste("results_used.md and CLAUDE.md disagree with each other (206 vs 202) and both",
-                   "predate the current pipeline. The value in this row is the one the current",
-                   "models carry. Reconcile to it, in results_used.md and CLAUDE.md's Key sample facts."))
+      note = paste("results_used.md (206) and VERIFICATION.md A2 (202) disagree with each other and",
+                   "both predate the current pipeline. The value in this row is the one the current",
+                   "models carry. Reconcile results_used.md to it."))
 
   pre6f_problem <- input_problem("pre6f_ed3")
   for (nm in names(model_objects$tab_appA_arr)) {
@@ -984,7 +1026,7 @@ if (is.null(models_problem) && !is.null(model_objects)) {
   pending(SEC$t2, "Listwise deletion rule", reason,
           july = "list-wise deletion on safe available land and steep terrain (results_used.md L11)")
   pending(SEC$ed3, "N (reconciliation)", reason,
-          july = "206 (results_used.md L81); CLAUDE.md carries 202")
+          july = "206 (results_used.md L81); VERIFICATION.md A2 found 202")
 }
 
 # ---- 6.6 ED Figure -----------------------------------------------------------
@@ -1129,6 +1171,57 @@ guarded(SEC$robust, c("rb_sens_sizes"), list("Sweep sample sizes"), function() {
     add(SEC$robust, sprintf("cut > %s — sample retained", d$cut[i]),
         sprintf("municipalities %s, arrangements %s", n_fmt(d$n_mun_after[i]), n_fmt(d$n_arr_after[i])),
         "rb_sens_sizes")
+})
+
+# ---- 6.9 Appendix descriptive statistics -------------------------------------
+# The exhibit itself is the full table in output/; only the rows the manuscript
+# text is likely to quote are carried here, plus both blocks' N. Reproducing all
+# 17 variables x 8 statistics x 2 blocks x 2 levels would bury the file.
+
+QUOTED_VARS <- c("pct_area_periph_ext_leap_0010", "pct_area_densif_infill_0010",
+                 "g_alta", "delta_pp_alta")
+
+desc_rows <- function(key, level_label) {
+  d <- readr::read_csv(inp_path(key), show_col_types = FALSE, progress = FALSE)
+  if (!all(c("variable", "block", "N", "mean", "median", "min", "max") %in% names(d))) {
+    pending(SEC$desc, sprintf("%s descriptives", level_label),
+            "the descriptives CSV does not carry the expected columns")
+    return(invisible(NULL))
+  }
+  # both blocks' N, so the listwise loss is a target in its own right
+  for (blk in unique(d$block)) {
+    sub <- d[d$block == blk, ]
+    if (nrow(sub) == 0) next
+    add(SEC$desc, sprintf("%s — %s — N (max across variables)", level_label, blk),
+        n_fmt(max(sub$N, na.rm = TRUE)), key,
+        note = "listwise deletion makes N vary by variable; the maximum is the block size")
+  }
+  for (v in QUOTED_VARS) {
+    for (blk in unique(d$block)) {
+      r <- d[d$variable == v & d$block == blk, ]
+      if (nrow(r) != 1) next
+      lab <- if ("label" %in% names(r)) r$label[1] else v
+      add(SEC$desc,
+          sprintf("%s — %s — %s", level_label, blk, lab),
+          sprintf("mean %s, median %s, range %s to %s (N %s)",
+                  f4(r$mean[1]), f4(r$median[1]), f4(r$min[1]), f4(r$max[1]),
+                  n_fmt(r$N[1])),
+          key)
+    }
+  }
+  if ("status" %in% names(d) && any(d$status != "VERIFIED", na.rm = TRUE))
+    add(SEC$desc, sprintf("%s — verification", level_label),
+        "UNVERIFIED — the exhibit could not match its reconstruction to the fitted models",
+        key, status = "PENDING",
+        note = "re-run 05_exhibits/ed_table_descriptive_statistics.R and read its step-3 output")
+  invisible(NULL)
+}
+
+guarded(SEC$desc, c("s05_desc_mun"), list("Municipality descriptives"), function() {
+  desc_rows("s05_desc_mun", "Municipality")
+})
+guarded(SEC$desc, c("s05_desc_arr"), list("Arrangement descriptives"), function() {
+  desc_rows("s05_desc_arr", "Arrangement")
 })
 
 # =============================================================================

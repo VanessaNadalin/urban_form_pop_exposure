@@ -369,17 +369,16 @@ unchanged nominal value had silently become a far more aggressive restriction th
 was decided. `MIGRATION_PLAN.md` 6c1 holds the rationale for both values; note that its heading
 still reads `> 1000` and its revision paragraph is what applies.
 
-**Five declarations of this constant exist, and they must stay equal.** Since 2026-09-16 the
+**Three declarations of this constant exist in this repository, and they must stay equal.** Since 2026-09-16 the
 canonical one is `00_setup.R:90` — `05_exhibits/robustness/`'s two threshold scripts read it
 from there rather than hardcoding, which is what stopped them drifting to a second
-configuration after the 2026-09-12 revision. Four others still declare their own, all at the
+configuration after the 2026-09-12 revision. Two others still declare their own, all at the
 same value:
 
 | Declaration | Status |
 |---|---|
 | `00_setup.R:90` | **canonical**; read by the two `robustness/` threshold scripts |
 | `16_estimate_models.R:201` | the pipeline's own; a one-line repoint away |
-| `05_exhibits/figure2_exposure_scatter.R:32` | same; comment already says it must match script 16 |
 | `diagnostics/native_vs_allocated_pop_2010_risk.R:1108` | same |
 
 `05_exhibits/table2_and_ed_tables.R:66` is the one consumer that does it right without a
