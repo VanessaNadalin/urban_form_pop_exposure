@@ -29,7 +29,7 @@ chain; stage 01 has none, and its four scripts are run one at a time.
 | `02_population_in_hazard_zones/` | Prepares the IBGE population grids and the national susceptibility layer, then crosses grid against hazard to obtain area-weighted exposed population per cell and per municipality. |
 | `03_urban_footprint_and_growth_types/` | Delimits the urban footprint from GHSL, classifies each newly built cell into a growth type (densification, infill, peripheral, extension, leapfrog) for 2000–2010 and 2010–2022, and aggregates to municipalities and functional urban areas. |
 | `04_regression_dataset_and_models/` | Assembles the regression dataset (urban form, housing-market, topographic and census covariates) and estimates the models, saving the fitted objects. It does not format any table. |
-| `05_exhibits/` | Reads the saved results and produces the final tables and figures in `output/`, plus `robustness/`, a set of diagnostic and sensitivity analyses that support the paper without feeding any published number. |
+| `05_exhibits/` | Reads the saved results and produces the final tables and figures in `output/`, then regenerates `manuscript/results_targets_v2.md`. |
 
 Growth typology: **compact** = densification + infill; **sprawl** = peripheral + extension +
 leapfrog. Treatment window 2000–2010; outcome window 2010–2022.
@@ -97,9 +97,10 @@ archives from RIGEO, and expects a working directory holding those files and the
 > `suscet_inundacao_br.gpkg` and `suscet_massa_br.gpkg` in
 > `data/raw_data/02_hazard_zones/` to run stage 02 without re-scraping.
 
-**Stage 02 is runnable but very expensive.** The grid × hazard crossing takes roughly 18–24 h,
-about 20–28 h for the stage, needs 8–16 GB of RAM, and has no skip-if-already-computed logic, so
-a re-run is a full re-run. Its outputs are deposited alongside the data; a reader is not expected
+**Stage 02 is runnable but very expensive.** Each of its two grid × hazard crossings (high
+susceptibility, and CPRM mapped risk) takes roughly 18–24 h, about 36–48 h for the stage; it needs
+8–16 GB of RAM and has no skip-if-already-computed logic, so a re-run is a full re-run. The
+CPRM risk crossing feeds no exhibit; it is kept so that stage 02 matches the deposited outputs. Its outputs are deposited alongside the data; a reader is not expected
 to re-run the overlays.
 
 **Stages 03, 04 and 05 run cleanly from the deposited intermediates**, in the order above, and
@@ -119,19 +120,19 @@ are where every published table and figure is produced.
 ```
 01_download_susceptibility_maps/    stage 01 scripts and its pipeline document
 02_population_in_hazard_zones/      stage 02 (Python)
-03_urban_footprint_and_growth_types/  stage 03, plus diagnostics/
-04_regression_dataset_and_models/   stage 04, plus diagnostics/
-05_exhibits/                        stage 05, plus robustness/
+03_urban_footprint_and_growth_types/  stage 03
+04_regression_dataset_and_models/   stage 04
+05_exhibits/                        stage 05
 R/paths.R                           the single place data paths are defined
+R/docx_tables.R                     the shared Word (.docx) format of the tables
 data/raw_data/, data/processed_data/  inputs and intermediates (empty here; see below)
-output/                             final tables and figures
+output/                             final tables and figures (written by stage 05; empty here)
 manuscript/results_targets_v2.md    the generated source for every number
 ```
 
-`diagnostics/` and `05_exhibits/robustness/` hold read-only analyses that verify or defend claims
-in the paper. They write only to their own subfolders, never over a pipeline output, and no
-published number depends on them. They are included so that the checks behind the paper's
-robustness claims can be inspected and re-run.
+The deposit holds only the scripts that produce the paper's exhibits and the numbers it reports.
+Diagnostic and robustness scripts (the stages' `diagnostics/` folders and `05_exhibits/robustness/`)
+are kept in the project's working repository; no exhibit or reported number depends on them.
 
 ---
 
@@ -147,10 +148,12 @@ way to break a pipeline silently. Read the pipeline documents for what each colu
 
 This repository is a subset of a larger working repository. Comments and provenance notes
 sometimes cite documents that are kept there and are not part of this deposit — `CLAUDE.md`,
-`MIGRATION_PLAN.md`, `METHODS_AUDIT.md`, `AUDIT.md`, `VERIFICATION.md`, `results_used.md` — along
-with a handful of migration-era diagnostic scripts, named where they are mentioned. They are
-records of how the analysis was reorganised, not descriptions of how it runs; nothing here
-depends on them.
+`MIGRATION_HISTORY.md` and `MIGRATION_PLAN.md` (dated decisions, cited by entry ID such as 6e or
+6f.2), `METHODS_AUDIT.md`, `AUDIT.md`, `VERIFICATION.md`, `results_used.md`,
+`results_targets_v2_REQUIREMENTS.md` — along with the diagnostic and robustness scripts, named
+where they are mentioned. They are records of how the analysis was reorganised and checked, not
+descriptions of how it runs; nothing here depends on them. Likewise, the commit hash in the header
+of `manuscript/results_targets_v2.md` is that of the working repository at the time of the run.
 
 Comments citing a numbered "rule" refer to the conventions the code was written to, which are:
 

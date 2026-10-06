@@ -21,10 +21,10 @@ Installed from CRAN unless noted.
 | **01** susceptibility maps | `data.table`, `dplyr`, `fs`, `future.apply`, `httr`, `lwgeom`, `progress`, `purrr`, `readr`, `readxl`, `rvest`, `sf`, `stringr`, `tidyr` |
 | **02** population in hazard zones | *(Python only — see `requirements.txt`)* |
 | **03** urban footprint and growth types | `arrow`, `curl`, `dplyr`, `exactextractr`, `geobr`, `here`, `purrr`, `readr`, `readxl`, `sf`, `sfarrow`, `stringi`, `stringr`, `terra`, `tibble`, `tidyr` |
-| **04** regression dataset and models | `arrow`, `censobr`, `cli`, `curl`, `dplyr`, `elevatr`, `fs`, `geobr`, `here`, `httr`, `lmtest`, `rappdirs`, `readr`, `readxl`, `rvest`, `sandwich`, `sf`, `sfarrow`, `stringr`, `terra`, `tibble`, `tidyr`, `xml2` |
-| **05** exhibits | `arrow`, `car`, `DescTools`, `dplyr`, `ggcorrplot`, `ggplot2`, `here`, `lmtest`, `moments`, `readr`, `sandwich`, `scales`, `sf`, `sfarrow`, `tibble`, `tidyr` |
+| **04** regression dataset and models | `arrow`, `car`, `censobr`, `cli`, `curl`, `dplyr`, `elevatr`, `fs`, `geobr`, `here`, `httr`, `lmtest`, `rappdirs`, `readr`, `readxl`, `rvest`, `sandwich`, `sf`, `sfarrow`, `stringr`, `terra`, `tibble`, `tidyr`, `xml2` |
+| **05** exhibits | `arrow`, `car`, `dplyr`, `flextable`, `ggplot2`, `here`, `lmtest`, `modelsummary`, `officer`, `purrr`, `readr`, `sandwich`, `scales`, `sf`, `sfarrow`, `tibble`, `tinytable` |
 
-`R/paths.R` requires `here`. Base and recommended packages used explicitly (`stats`, `tools`,
+`R/paths.R` requires `here`; `R/docx_tables.R` requires `flextable` and `officer`. Base and recommended packages used explicitly (`stats`, `tools`,
 `utils`) ship with R.
 
 ## Notes
@@ -35,6 +35,3 @@ Installed from CRAN unless noted.
   are the usual `libgdal-dev`, `libgeos-dev`, `libproj-dev`, `libudunits2-dev` packages.
 - `sfarrow` is used to read and write GeoParquet; `arrow` must be installed with Parquet
   support (the default CRAN binary has it).
-- `DescTools` is loaded by `05_exhibits/robustness/outlier_diagnostics.R` without a
-  `requireNamespace()` guard: that one script errors on a clean install if the package is
-  missing. Every other optional dependency is guarded.
