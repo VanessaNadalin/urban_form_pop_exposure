@@ -93,15 +93,16 @@ archives from RIGEO, and expects a working directory holding those files and the
 `making_suscep_national.md`. A reader is not expected to re-scrape RIGEO.
 
 > **The dissolved national susceptibility layer that stage 01 produces, and that stage 02 needs,
-> is deposited separately: _[DOI / repository URL to be inserted]_.** Place the deposited
-> `suscet_inundacao_br.gpkg` and `suscet_massa_br.gpkg` in
-> `data/raw_data/02_hazard_zones/` to run stage 02 without re-scraping.
+> will be part of the data deposit described under "Data availability".** Place
+> `suscet_inundacao_br.gpkg` and `suscet_massa_br.gpkg` in `data/raw_data/02_hazard_zones/` to
+> run stage 02 without re-scraping.
 
 **Stage 02 is runnable but very expensive.** Each of its two grid × hazard crossings (high
 susceptibility, and CPRM mapped risk) takes roughly 18–24 h, about 36–48 h for the stage; it needs
 8–16 GB of RAM and has no skip-if-already-computed logic, so a re-run is a full re-run. The
-CPRM risk crossing feeds no exhibit; it is kept so that stage 02 matches the deposited outputs. Its outputs are deposited alongside the data; a reader is not expected
-to re-run the overlays.
+CPRM risk crossing feeds no exhibit; it is kept so that stage 02 matches its recorded outputs.
+Stage 02's outputs will be part of the data deposit; a reader is not expected to re-run the
+overlays.
 
 **Stages 03, 04 and 05 run cleanly from the deposited intermediates**, in the order above, and
 are where every published table and figure is produced.
@@ -175,10 +176,25 @@ MIT — see [`LICENSE`](LICENSE). The licence covers the code in this repository
 
 ## Data availability
 
-_[To be inserted before deposit: the DOI of the data deposit, what it contains — the dissolved
-susceptibility layer, the stage-02 crossing outputs, and the stage-03/04 intermediates — and the
-terms under which the IBGE, SGB/CPRM and GHSL source data are redistributed.]_
+No data are distributed in this repository. All source data are public:
+
+- **IBGE**: the Statistical Grid of the 2010 and 2022 Censuses, municipal boundaries, census-tract
+  data (2010 Census), urban-concentration arrangements and municipal GDP (2010);
+- **SGB/CPRM**: the municipal susceptibility maps to floods and mass movements (RIGEO repository)
+  and the mapped risk sectors;
+- **European Commission JRC**: GHSL built-up surface and population grids (2000, 2010, 2020) and
+  the Global Surface Water layer;
+- **Elevation**: digital elevation tiles retrieved with the R package `elevatr` (AWS Terrain
+  Tiles).
+
+The scripts download most of these at run time (see each stage's pipeline document). A deposit of
+the derived data needed to run the pipeline without re-scraping or re-running stage 02 — the
+dissolved national susceptibility layer, the stage-02 crossing outputs and the stage-03/04
+intermediates — is in preparation; its DOI will be added here on publication. Until then these
+data are available from the corresponding author on request. Source data remain subject to their
+providers' terms of use.
 
 ## Citation
 
-_[To be inserted before deposit.]_
+Please cite the article (reference to be added on publication) and this repository at the tag
+used for the submission: `VanessaNadalin/urban_form_pop_exposure`, tag `v1.0-submission`.

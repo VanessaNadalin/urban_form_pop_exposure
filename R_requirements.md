@@ -7,10 +7,26 @@ The analysis is written in R, with two Python steps (see `requirements.txt`).
 **R 4.3 or later.** The code uses the native pipe `|>` (R ≥ 4.1) and relies on R ≥ 4.3
 semantics for `||` with scalar operands. It has not been tested on earlier versions.
 
-> **To complete before deposit:** record the exact R version and `sessionInfo()` of the run that
-> produced the deposited results, and pin package versions (for example with `renv::snapshot()`).
-> The list below is extracted from the code, not from a resolved environment, so it carries no
-> versions.
+**Recorded run.** The exhibits and `manuscript/results_targets_v2.md` of the submission were
+produced on 2026-10-06 with **R 4.6.1** (x86_64-w64-mingw32, Windows Server 2022). Package
+versions attached in that stage-05 session:
+
+| Package | Version | Package | Version |
+|---|---|---|---|
+| `arrow` | 25.0.1 | `readr` | 2.2.0 |
+| `dplyr` | 1.2.1 | `readxl` | 1.5.0.1 |
+| `flextable` | 0.10.1 | `sandwich` | 3.1-3 |
+| `geobr` | 2.1.0 | `scales` | 1.4.0 |
+| `ggplot2` | 4.0.3 | `sf` | 1.1-3 |
+| `here` | 1.0.2 | `sfarrow` | 0.4.1 |
+| `lmtest` | 0.9-40 | `stringi` | 1.8.9 |
+| `modelsummary` | 2.6.0 | `stringr` | 1.6.0 |
+| `officer` | 0.7.6 | `terra` | 1.9-50 |
+| `purrr` | 1.2.2 | `tidyr` | 1.3.2 |
+| `tinytable` | 0.19.0 | `zoo` | 1.9-0 |
+
+The package lists below are extracted from the code; versions of packages used only by stages
+01–04 were not recorded.
 
 ## Packages by stage
 
