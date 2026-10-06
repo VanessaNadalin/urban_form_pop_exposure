@@ -140,8 +140,8 @@ its output:
 python 04_regression_dataset_and_models/06_builtup_in_susceptibility.py
 ```
 
-`05_exhibits/robustness/`'s seven scripts (correlations, DAG tests, outlier diagnostics, minimum
-population filter, double filter, steep terrain, case study) are kept live but unnumbered — they
+`05_exhibits/robustness/`'s eight scripts (correlations, DAG tests, outlier diagnostics, minimum
+population filter, double filter, steep terrain, case study, saturation test) are kept live but unnumbered — they
 read `dataset_regressao_{municipio,arranjo}.csv` after script 16 but are not part of
 `00_run_all.R`. They were **repointed on 2026-09-11** (commit `d8c0a2b`): all seven now
 `source("04_regression_dataset_and_models/00_setup.R")` and use this stage's current
@@ -354,10 +354,12 @@ timestamp), L509–522.
 | Object saved here | Exhibit, in `05_exhibits/table2_and_ed_tables.R` |
 |---|---|
 | `tab_main_mun` | **Table 2** — municipalities, 4 columns: `g_high` × compact/sprawl, `Dpp_high` × compact/sprawl |
-| `tab_mediators_mun` | **ED Table 2** — with / without / mediators-only |
-| `tab_appA_arr` | **ED Table 3** — functional urban areas, same 4 specs, HC3 |
-| `tab_horserace_mun` | **ED Table 4** — compact and sprawl entered jointly |
-| `tab_interact_mun` | **ED Table 5** — treatment × `urban_class` and × `regiao` |
+| `tab_mediators_mun` | **ED Table 4** — with / without / mediators-only. The 2010 housing-market block `MEDIATORS_HM` (median rent, Palma ratios of rent and commute, vacant safe land Q1 and Q4 with the Q4 indicator, and the slum population share — added to the block 2026-09-30) is omitted in the no-mediator columns (5)–(8) via `CTRL_ALTA_NO_MED`; Table 2 and the mediators-only columns (9)–(10) use the full `CTRL_ALTA`. All 10 columns on Table 2's estimation sample: the no-mediator columns are fitted on `ds_mun_table2` (rows with `in_table2_sample == TRUE`, complete cases over every Table 2 variable), and a guard stops the script if any Table 2 / ED Table 4 column has a different N (2026-09-30) |
+| `tab_nomed_owncc_mun` | No exhibit; robustness only — ED Table 4's no-mediator columns on their own complete cases, as reported before 2026-09-30; read by `build_results_targets.R` |
+| `tab_appA_arr` | **ED Table 5** — functional urban areas, same 4 specs, HC3 |
+| `tab_horserace_mun` | **ED Table 3** — compact and sprawl entered jointly |
+| `tab_patha_mun` | No exhibit yet; reported in `results_targets_v2.md` — "path a": each 2010 housing-market mediator (Q1/Q4 vacant safe land, median rent, Palma ratios of rent and commute, favela share) on compact or sprawl growth 2000–2010; controls `CTRL_PATHA` (pre-2000 and time-invariant only); Table 2's sample and clustering |
+| `tab_interact_mun` | **ED Table 6** — treatment × `urban_class` and × `regiao` |
 
 The old internal names (`tab1_main_municipios_high`, `tab2_interactions…`) predated the
 manuscript's numbering and are gone; the exhibit numbering above is the paper's.
@@ -403,6 +405,17 @@ come out inflated again at this cut has to be read off Table 2's output.
    every `CTRL_ALTA` term, not a narrower fixed subset. `results_used.md`'s Table 2 note implies
    a narrower listwise set ("safe available land and steep terrain"); the script prints the gap
    between the two at L275–278 rather than hiding it.
+3. **Vacant safe land Q4 enters filled, with an indicator (2026-09-30).** Income quartiles are
+   assigned within each arrangement (`07_housing_quality.R:172–177`), so a municipality with no
+   cells in its arrangement's top quartile has an undefined Q4 share (NA). `prep()` adds
+   `no_q4_cells_2010` and `pct_nao_constru_fora_alta_2010_q4_f` (the share, 0 where undefined);
+   `CTRL_ALTA` uses these two instead of the raw column, so those municipalities are no longer
+   dropped listwise. The raw `pct_nao_constru_fora_alta_2010_q4` is unchanged and is path a's
+   outcome. At arrangement level Q4 is always defined, so the indicator is constant and aliased.
+4. **One estimation sample for Table 2 and ED Table 4 (2026-09-30).** `in_table2_sample` marks the
+   complete cases over every Table 2 variable; ED Table 4's no-mediator columns are fitted on
+   those rows (`ds_mun_table2`), and the script stops if any Table 2 / ED Table 4 column has a
+   different N.
 
 **Standard errors** (L310–317): municipality models cluster by `NM_CIDADE`, the functional urban
 area, via `vcovCL`, falling back to HC3 when no cluster vector is attached; arrangement models

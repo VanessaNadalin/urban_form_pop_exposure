@@ -71,12 +71,15 @@
 #   - tabela1a_populacao_totais_tipo.csv   (levels table, 1a)
 #   - tabela1_populacao_risco_tipo.csv     (change table, 1b)
 #   - tabela1_populacao_risco_tipo.pdf / .png  (stacked bar chart, 1b "panel a")
+#   - table1_population_by_growth_type.docx    (Table 1 as it goes in the paper,
+#     in the researcher's format, from the Table 1a levels; added 2026-10-01)
 # =============================================================================
 
 source("03_urban_footprint_and_growth_types/00_setup.R")
 
 library(ggplot2)
 library(scales)
+source("R/docx_tables.R")   # flextable/officer and the shared Word constants
 
 cat("\n", strrep("=", 60), "\n")
 cat("TABLE1_POPULATION_BY_GROWTH_TYPE.R\n")
@@ -288,6 +291,57 @@ if (file.exists(baseline_path)) {
 out_csv_1a <- output_path("tabela1a_populacao_totais_tipo.csv")
 readr::write_csv(bind_rows(tabela1a, tabela1a_total %>% mutate(growth_type = factor(growth_type, levels = levels(alvo_niveis$growth_type)))), out_csv_1a)
 cat(sprintf("\nSaved: %s\n", out_csv_1a))
+
+# --- 1c) TABLE 1 — Word version in the researcher's format (2026-10-01) -----
+# Same numbers as Table 1a above, laid out as the researcher's Tabela_1.docx:
+# 2010 | 2022 | change, three columns each; header Calibri 11 bold, body
+# Calibri 9; rules under each header row and above Total, none at the bottom;
+# no title or notes. Counts are rounded to whole people; the last column is
+# the change in population at risk as a percentage of the change in total
+# population.
+t1 <- bind_rows(tabela1a, tabela1a_total) %>%
+  mutate(
+    growth_type      = as.character(growth_type),
+    change_pop       = pop_2022 - pop_2010,
+    pct_change_risco = 100 * change_risco / change_pop
+  )
+fmt_n   <- function(x) formatC(round(x), format = "d", big.mark = ",")
+fmt_pct <- function(x) formatC(x, format = "f", digits = 1)
+t1_tab <- tibble::tibble(
+  type = t1$growth_type,
+  p10  = fmt_n(t1$pop_2010),   r10   = fmt_n(t1$risco_2010),   s10 = fmt_pct(t1$pct_risco_2010),
+  p22  = fmt_n(t1$pop_2022),   r22   = fmt_n(t1$risco_2022),   s22 = fmt_pct(t1$pct_risco_2022),
+  dpop = fmt_n(t1$change_pop), drisk = fmt_n(t1$change_risco), sch = fmt_pct(t1$pct_change_risco)
+)
+ft1 <- flextable::flextable(t1_tab)
+ft1 <- flextable::set_header_labels(ft1, values = list(
+  type = "Urban footprint type",
+  p10 = "Total pop", r10 = "Pop at risk", s10 = "% at risk",
+  p22 = "Total pop", r22 = "Pop at risk", s22 = "% at risk",
+  dpop = "Change in pop", drisk = "Change in pop at risk",
+  sch = "% of change in pop at risk"))
+ft1 <- flextable::add_header_row(ft1, values = c("", "2010", "2022", "Change, 2010–2022"),
+                                 colwidths = c(1, 3, 3, 3))
+ft1 <- flextable::font(ft1, fontname = DOCX_FONT, part = "all")
+ft1 <- flextable::fontsize(ft1, size = DOCX_SIZE, part = "header")
+ft1 <- flextable::fontsize(ft1, size = 9, part = "body")
+ft1 <- flextable::bold(ft1, bold = TRUE,  part = "header")
+ft1 <- flextable::bold(ft1, bold = FALSE, part = "body")
+ft1 <- flextable::border_remove(ft1)
+ft1 <- flextable::hline(ft1, i = 1, j = 2:10, border = DOCX_RULE, part = "header")
+ft1 <- flextable::hline(ft1, i = 2, border = DOCX_RULE, part = "header")
+ft1 <- flextable::hline(ft1, i = nrow(t1_tab) - 1, border = DOCX_RULE, part = "body")  # above Total
+ft1 <- flextable::align(ft1, j = 1, align = "left", part = "all")
+ft1 <- flextable::align(ft1, j = 2:10, align = "center", part = "header")
+ft1 <- flextable::align(ft1, j = 2:10, align = "right", part = "body")
+ft1 <- flextable::valign(ft1, valign = "bottom", part = "all")
+# Column widths of the researcher's file (twips / 567 = cm).
+ft1 <- flextable::width(ft1, j = 1:10, unit = "cm",
+                        width = c(1260, 1000, 1000, 500, 1000, 1000, 500, 960, 840, 792) / 567)
+out_docx_1 <- output_path("table1_population_by_growth_type.docx")
+doc1 <- flextable::body_add_flextable(officer::read_docx(), ft1, align = "left")
+print(doc1, target = out_docx_1)
+cat(sprintf("Saved: %s\n", out_docx_1))
 
 # --- 2) TABLE 1b — CHANGE (the stacked bar chart, "panel a") -----------------
 # TIPOS_GRUPO already defined above (section 1b), reused here. Deltas are

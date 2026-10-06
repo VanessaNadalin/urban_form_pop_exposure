@@ -1,6 +1,8 @@
 # =============================================================================
 # ed_table_descriptive_statistics.R
-# Appendix table: descriptive statistics for every variable in Table 2's
+# Extended Data Table 2 (numbered 2026-09-30; its .docx shows municipalities,
+# estimation sample only) and the full statistics behind it.
+# Descriptive statistics for every variable in Table 2's
 # specification -- the two outcomes, the two treatments, and all controls --
 # at both levels of analysis (municipalities and functional urban areas).
 #
@@ -29,11 +31,12 @@
 # script's reconstruction of the estimation sample is the same one the
 # coefficients came from -- see "verification" below.
 #
-# THE ONE COPIED THING, AND HOW IT IS CHECKED. Five variables are constructed
+# THE ONE COPIED THING, AND HOW IT IS CHECKED. Seven variables are constructed
 # in 16_estimate_models.R's prep()/prep_0010() rather than stored in the CSV:
 # log_pib_pc, log_pop_total_2000, log_area_2000_km2 (prep, L94/L103/L104) and
 # the two treatment sums pct_area_densif_infill_0010 / _periph_ext_leap_0010
-# (prep_0010, L120/L123-125). Their formulas are copied below -- and then
+# (prep_0010, L120/L123-125), and the Q4 fill and its indicator (prep,
+# 2026-09-30). Their formulas are copied below -- and then
 # CHECKED against the fitted models' own model frames, variable by variable,
 # on the estimation rows. A copy that has drifted fails that check loudly
 # rather than producing a plausible wrong table. The repository already
@@ -46,16 +49,19 @@
 #   data/processed_data/04_regression/model_objects_table2.rds                (script 16)
 #
 # Outputs (in output/):
-#   ed_table_descriptives_municipality.csv
-#   ed_table_descriptives_arrangement.csv
-#   ed_table_descriptives_categorical.csv
-#   ed_table_descriptives.md          (both levels, formatted for the appendix)
+#   ed_table2_descriptives_municipality.csv
+#   ed_table2_descriptives_arrangement.csv
+#   ed_table2_descriptives_categorical.csv
+#   ed_table2_descriptives.md         (both levels, both blocks, for reference)
+#   ed_table2_descriptives.docx       (ED Table 2: municipalities, block A, in
+#                                      the shared Word format of R/docx_tables.R)
 #
 # Run from the repository root (relative paths, CLAUDE.md rule 5):
 #   source("05_exhibits/ed_table_descriptive_statistics.R")
 # =============================================================================
 
 source("04_regression_dataset_and_models/00_setup.R")
+source("R/docx_tables.R")   # shared Word format (2026-09-30)
 
 cat("\n", strrep("=", 74), "\n", sep = "")
 cat("APPENDIX TABLE — DESCRIPTIVE STATISTICS FOR TABLE 2's VARIABLES\n")
@@ -70,25 +76,46 @@ cat(sprintf("  Minimum-baseline cut (from 00_setup.R): pop_2010_risk_total > %d\
 
 # Order here is the order in the exhibit: outcomes, treatments, then controls
 # grouped as exposure/terrain, housing market, size and composition.
+#
+# LABELS (aligned 2026-10-06): every label below is the one Table 2 and the ED
+# Tables 3-6 print for the same variable -- coef_map_main / coef_map_full in
+# 05_exhibits/table2_and_ed_tables.R:274-300, and the hidden-control note at
+# :252-259 for the variables those tables do not display (log GDP per capita,
+# the two indicators). ED Table 1 (output/variables_definitions.xlsx) uses the
+# same set, so a reader meets one name per variable across all the exhibits
+# instead of the three competing sets that existed before.
+#
+# Two labels are not coefficient rows anywhere, because Table 2 prints the
+# outcomes as column headers rather than rows: g_alta and delta_pp_alta keep the
+# short names this script already used, which ED Table 1 adopted for its own
+# outcome rows.
+#
+# The Q4 row keeps its "(where defined)" qualifier: this exhibit describes the
+# RAW column, whose N counts only the municipalities where it is defined, while
+# Table 2's row of the same name is the zero-filled version (see DUMMIES below).
+#
+# Units are deliberately unchanged -- they were already checked against the
+# construction code (see the note after this block) and are correct.
 VAR_SPEC <- tibble::tribble(
   ~variable,                            ~label,                                              ~unit,        ~role,
-  "g_alta",                             "Growth of exposed population, 2010-2022",           "%",          "Outcome",
-  "delta_pp_alta",                      "Change in exposed population share, 2010-2022",     "p.p.",       "Outcome",
-  "pct_area_densif_infill_0010",        "Compact growth share, 2000-2010",                   "% of area",  "Treatment",
-  "pct_area_periph_ext_leap_0010",      "Sprawl growth share, 2000-2010",                    "% of area",  "Treatment",
-  "g_fora_alta",                        "Growth of non-exposed population, 2010-2022",       "%",          "Control (cols 1-2 only)",
+  "g_alta",                             "Growth of exposed population, 2010–2022",           "%",          "Outcome",
+  "delta_pp_alta",                      "Change in exposed population share, 2010–2022",     "p.p.",       "Outcome",
+  "pct_area_densif_infill_0010",        "Compact share of urban footprint",                  "% of area",  "Treatment",
+  "pct_area_periph_ext_leap_0010",      "Sprawl share of urban footprint",                   "% of area",  "Treatment",
+  "g_fora_alta",                        "Pop growth outside risk",                           "%",          "Control (cols 1-2 only)",
   "topo_prop_inclinado",                "Steep terrain",                                     "proportion", "Control",
-  "pp_alta_2010",                       "Exposed population share, 2010",                    "%",          "Control",
-  "pct_nao_constru_fora_alta_2010_q1",  "Unbuilt land outside hazard zones, income-quartile-1 cells, 2010",  "% of area",  "Control",
-  "pct_nao_constru_fora_alta_2010_q4",  "Unbuilt land outside hazard zones, income-quartile-4 cells, 2010",  "% of area",  "Control",
-  "palma_rent",                         "Palma ratio, rent",                                 "ratio",      "Control (housing market)",
-  "palma_commute",                      "Palma ratio, commuting time",                       "ratio",      "Control (housing market)",
-  "median_rent",                        "Median rent",                                       "BRL",        "Control (housing market)",
-  "log_pib_pc",                         "GDP per capita, 2010 (log)",                        "log R$ thousand", "Control",
-  "log_pop_total_2000",                 "Total population, 2000 (log)",                      "log people", "Control",
-  "log_area_2000_km2",                  "Urban footprint area, 2000 (log)",                  "log km2",    "Control",
+  "pp_alta_2010",                       "Pop share in risk, 2010",                           "%",          "Control",
+  "pct_nao_constru_fora_alta_2010_q1",  "Vacant safe land, Q1, 2010",                        "% of area",  "Control",
+  "pct_nao_constru_fora_alta_2010_q4",  "Vacant safe land, Q4, 2010 (where defined)",        "% of area",  "Control",
+  "no_q4_cells_2010",                   "No top-income-quartile cells, 2010",                "0/1",        "Control (dummy)",
+  "palma_rent",                         "Palma ratio rents, 2010",                           "ratio",      "Control (housing market)",
+  "palma_commute",                      "Palma ratio commute, 2010",                         "ratio",      "Control (housing market)",
+  "median_rent",                        "Median rent, 2010",                                 "BRL",        "Control (housing market)",
+  "log_pib_pc",                         "Log GDP per capita, 2010",                          "log R$ thousand", "Control",
+  "log_pop_total_2000",                 "Log total population, 2000",                        "log people", "Control",
+  "log_area_2000_km2",                  "Log urban footprint, 2000",                         "log km2",    "Control",
   "zero_area_2000",                     "No urban footprint in 2000",                        "0/1",        "Control (dummy)",
-  "prop_favelas_2010",                  "Population in subnormal clusters, 2010",            "proportion", "Control"
+  "prop_favelas_2010",                  "Slum population share, 2010",                       "proportion", "Control"
 )
 
 # UNITS, checked against the construction code rather than inferred from names:
@@ -103,7 +130,10 @@ VAR_SPEC <- tibble::tribble(
 # Indicators: zero_area_2000 alone. Its mean is a proportion and its quartiles
 # carry no separate information, so it is flagged in the exhibit. The two
 # quartile variables above read like indicators from their names and are not.
-DUMMIES <- c("zero_area_2000")
+# no_q4_cells_2010 (added 2026-09-30) is the indicator paired with Q4's fill:
+# the Q4 row above shows the raw share, so its N counts the municipalities
+# where it is defined; the regressions use it filled with 0 plus this dummy.
+DUMMIES <- c("zero_area_2000", "no_q4_cells_2010")
 
 # Factors: category frequencies instead of moments.
 FACTORS <- c("regiao", "urban_class")
@@ -113,7 +143,7 @@ CTRL_ALTA <- c(
   "topo_prop_inclinado",
   "pp_alta_2010",
   "pct_nao_constru_fora_alta_2010_q1",
-  "pct_nao_constru_fora_alta_2010_q4",
+  "pct_nao_constru_fora_alta_2010_q4_f", "no_q4_cells_2010",
   "palma_rent", "palma_commute", "median_rent",
   "log_pib_pc", "log_pop_total_2000", "log_area_2000_km2", "zero_area_2000",
   "prop_favelas_2010",
@@ -133,7 +163,7 @@ SPEC_MAIN <- list(
 )
 
 # =============================================================================
-# 2) CONSISTENCY MANIFEST — the five constructed variables
+# 2) CONSISTENCY MANIFEST — the seven constructed variables
 #    Copied from 16_estimate_models.R prep() (L94, L103, L104) and
 #    prep_0010() (L120, L123-125). Verified against the fitted models below.
 # =============================================================================
@@ -143,6 +173,8 @@ build_derived <- function(df) {
     log_pib_pc         = log(pib_pc_2010 + 1),
     log_pop_total_2000 = log(pop_2000    + 1),
     log_area_2000_km2  = log(area_2000_m2 / 1e6 + 0.001),
+    no_q4_cells_2010   = as.integer(is.na(pct_nao_constru_fora_alta_2010_q4)),
+    pct_nao_constru_fora_alta_2010_q4_f = coalesce(pct_nao_constru_fora_alta_2010_q4, 0),
     pct_area_densif_infill_0010   = pct_area_densif_0010 + pct_area_infill_0010,
     pct_area_periph_ext_leap_0010 = pct_area_peripheral_0010 +
                                     pct_area_extension_0010  +
@@ -158,12 +190,15 @@ build_derived <- function(df) {
 }
 
 DERIVED <- c("log_pib_pc", "log_pop_total_2000", "log_area_2000_km2",
+             "no_q4_cells_2010", "pct_nao_constru_fora_alta_2010_q4_f",
              TRAT_COMPACT, TRAT_PERIPH)
 
 cat("\nConstructed variables copied from 16_estimate_models.R:\n")
 cat("  log_pib_pc                    = log(pib_pc_2010 + 1)                    [prep L94]\n")
 cat("  log_pop_total_2000            = log(pop_2000 + 1)                       [prep L103]\n")
 cat("  log_area_2000_km2             = log(area_2000_m2/1e6 + 0.001)           [prep L104]\n")
+cat("  no_q4_cells_2010              = is.na(Q4 share)                          [prep]\n")
+cat("  pct_nao_..._2010_q4_f         = Q4 share, 0 where no Q4 cells           [prep]\n")
 cat("  pct_area_densif_infill_0010   = densif + infill                         [prep_0010 L120]\n")
 cat("  pct_area_periph_ext_leap_0010 = peripheral + extension + leapfrog       [prep_0010 L123]\n")
 cat("  (each is checked against the fitted models' own values in step 5)\n")
@@ -354,7 +389,7 @@ describe_block <- function(df, block_label, level_label) {
   # A variable with no variation in this sample is collinear with the
   # intercept: lm() aliases it and reports no coefficient. zero_area_2000 is
   # constant (all 0) at arrangement level -- MIGRATION_PLAN.md 6c2 finding 4,
-  # which ED Table 3 already footnotes. Reporting its row as an ordinary
+  # which ED Table 5 (FUAs) already footnotes. Reporting its row as an ordinary
   # variable with mean 0 would imply the regression used it.
   out$is_constant <- !is.na(out$sd) & out$sd == 0 & out$N > 0
   out$block    <- block_label
@@ -402,10 +437,11 @@ desc_cat <- do.call(rbind, c(
 
 cat("\n5) Writing outputs...\n")
 
-out_mun <- output_path("ed_table_descriptives_municipality.csv")
-out_arr <- output_path("ed_table_descriptives_arrangement.csv")
-out_cat <- output_path("ed_table_descriptives_categorical.csv")
-out_md  <- output_path("ed_table_descriptives.md")
+out_mun  <- output_path("ed_table2_descriptives_municipality.csv")
+out_arr  <- output_path("ed_table2_descriptives_arrangement.csv")
+out_cat  <- output_path("ed_table2_descriptives_categorical.csv")
+out_md   <- output_path("ed_table2_descriptives.md")
+out_docx <- output_path("ed_table2_descriptives.docx")
 
 readr::write_csv(desc_mun, out_mun)
 readr::write_csv(desc_arr, out_arr)
@@ -487,6 +523,41 @@ md <- c(md, "",
 
 writeLines(md, out_md)
 cat(sprintf("  Saved: %s\n", out_md))
+
+# ED Table 2 as it goes in the paper (decided 2026-09-30): municipalities,
+# estimation sample (block A) only, in the shared Word format. The other
+# blocks stay in the CSVs and the .md above.
+ed2 <- desc_mun[desc_mun$block == "A. Estimation sample", ]
+ed2_tab <- data.frame(
+  Variable = ifelse(ed2$is_dummy, paste0(ed2$label, " †"), ed2$label),
+  Unit     = ed2$unit,
+  N        = formatC(as.integer(ed2$N), format = "d", big.mark = ","),
+  Mean     = mapply(fmt_num, ed2$mean,   abs(ed2$mean)),
+  SD       = mapply(fmt_num, ed2$sd,     abs(ed2$mean)),
+  Min      = mapply(fmt_num, ed2$min,    abs(ed2$mean)),
+  Median   = mapply(fmt_num, ed2$median, abs(ed2$mean)),
+  Max      = mapply(fmt_num, ed2$max,    abs(ed2$mean)),
+  stringsAsFactors = FALSE, check.names = FALSE
+)
+ft_ed2 <- flextable::flextable(ed2_tab)
+ft_ed2 <- style_docx_table(ft_ed2, widths_cm = c(7, 1.8))
+ft_ed2 <- flextable::align(ft_ed2, j = 2, align = "left", part = "all")   # units are text
+n_est  <- max(as.integer(ed2$N), na.rm = TRUE)
+write_docx_table(
+  ft_ed2,
+  "ED Table 2 — Descriptive statistics of the variables in Table 2: municipalities, estimation sample.",
+  c(paste(sprintf("Municipalities used to estimate Table 2 (N = %d): more than %d residents in",
+                  n_est, MIN_POP_RISCO_2010),
+          "risk areas in 2010 and no missing value in any variable of the specification.",
+          "Variable definitions in Extended Data Table 1."),
+    paste("Vacant safe land Q4 is reported where it is defined: municipalities with no cells",
+          "in their arrangement's top income quartile have no value, enter the regressions",
+          "with 0, and are identified by the indicator below it."),
+    "† 0/1 indicator: the mean is the share of municipalities with the value 1.",
+    "Region and urban-class indicators are included in the regressions and not shown here."),
+  out_docx
+)
+cat(sprintf("  Saved: %s\n", out_docx))
 
 # =============================================================================
 # 8) CONSOLE SUMMARY

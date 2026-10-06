@@ -33,13 +33,23 @@
 #   tab_main_mun      -> Table 2   (municipalities, high susceptibility, 4 cols:
 #                        (1) g_high Compact (2) g_high Sprawl
 #                        (3) Dpp_high Compact (4) Dpp_high Sprawl)
-#   tab_appA_arr      -> ED Table 3 (functional urban areas, same 4 specs, HC3)
-#   tab_interact_mun  -> ED Table 5 (treatment x urban_class / x regiao, 8 cols;
+#   tab_appA_arr      -> ED Table 5 (functional urban areas, same 4 specs, HC3)
+#   tab_interact_mun  -> ED Table 6 (treatment x urban_class / x regiao, 8 cols;
 #                        the 4 regiao columns exclude Centro-Oeste -- decided
 #                        2026-09-10, MIGRATION_PLAN.md 6c2, see the fit call below)
-#   tab_mediators_mun -> ED Table 2 (with vs. without housing-market mediators,
-#                        10 cols)
-#   tab_horserace_mun -> ED Table 4 (compact and sprawl entered jointly, 2 cols)
+#   tab_mediators_mun -> ED Table 4 (with vs. without housing-market mediators,
+#                        10 cols; the no-mediator columns (5)-(8) are fitted on
+#                        Table 2's estimation sample, in_table2_sample, so the
+#                        comparison is nested -- MIGRATION_HISTORY.md Part 2,
+#                        2026-09-30)
+#   tab_nomed_owncc_mun -> no exhibit; robustness only: columns (5)-(8) on
+#                        their own complete cases, as they were before
+#                        2026-09-30
+#   tab_horserace_mun -> ED Table 3 (compact and sprawl entered jointly, 2 cols)
+#   tab_patha_mun     -> no exhibit yet; reported in results_targets_v2.md
+#                        ("path a": each 2010 housing-market mediator on
+#                        pre-period compact / sprawl growth, 12 cols;
+#                        MIGRATION_HISTORY.md Part 2, 2026-09-28)
 #
 #   High susceptibility only (rule 9): the pre-existing medium-susceptibility
 #   and high+medium specs (formerly Tables A2/A3) were removed 2026-09 --
@@ -104,6 +114,18 @@ prep <- function(df) {
     log_area_2000_km2    = log(area_2000_m2 / 1e6 + 0.001),
     g_fora_suscept_slums = coalesce(g_slums_1022 - g_alta_slums_1022, 0),
     pct_area_periph_ext_leap = pct_area_peripheral + pct_area_extension + pct_area_leapfrog,
+    # Vacant safe land in top-income-quartile cells (decided 2026-09-30).
+    # Income quartiles are assigned within each arrangement
+    # (07_housing_quality.R:172-177), and 08_available_land.R computes the
+    # share over a municipality's quartile-4 cells only, so a municipality
+    # with no such cells gets NA: the share is undefined, not unobserved.
+    # As a CONTROL it enters filled with 0 plus an indicator for "no
+    # quartile-4 cells" (the zero_area_2000 device), so the slope is still
+    # identified only from municipalities that have those cells. The raw
+    # column is left untouched: path a uses it as an outcome, where an
+    # undefined value must stay missing.
+    no_q4_cells_2010                  = as.integer(is.na(pct_nao_constru_fora_alta_2010_q4)),
+    pct_nao_constru_fora_alta_2010_q4_f = coalesce(pct_nao_constru_fora_alta_2010_q4, 0),
     regiao      = factor(regiao,
                          levels = c("Sudeste", "Sul", "Nordeste",
                                     "Norte", "Centro-Oeste")),
@@ -251,7 +273,7 @@ CTRL_ALTA <- c(
   "topo_prop_inclinado",
   "pp_alta_2010",
   "pct_nao_constru_fora_alta_2010_q1",
-  "pct_nao_constru_fora_alta_2010_q4",
+  "pct_nao_constru_fora_alta_2010_q4_f", "no_q4_cells_2010",   # see prep()
   "palma_rent", "palma_commute", "median_rent",
   "log_pib_pc", "log_pop_total_2000", "log_area_2000_km2", "zero_area_2000",
   "prop_favelas_2010",
@@ -335,11 +357,34 @@ y_high <- list(
                                     ctrl = CTRL_DELTA)
 )
 
+# The 2010 housing-market block: the mediators ED Table 4's no-mediator
+# columns (5)-(8) omit. The slum population share belongs to it (decided
+# 2026-09-30, MIGRATION_HISTORY.md Part 2): it describes the 2010 housing
+# market as much as rents and vacant land do. Table 2 and the mediators-only
+# columns (9)-(10) keep the full CTRL_ALTA and are unaffected.
+MEDIATORS_HM <- c("median_rent", "palma_rent", "palma_commute",
+                  "pct_nao_constru_fora_alta_2010_q1",
+                  "pct_nao_constru_fora_alta_2010_q4_f", "no_q4_cells_2010",
+                  "prop_favelas_2010")
+
 # Controls WITHOUT mediators (mediation test)
-CTRL_ALTA_NO_MED <- setdiff(CTRL_ALTA, c("median_rent", "palma_rent", "palma_commute",
-                                           "pct_nao_constru_fora_alta_2010_q1",
-                                           "pct_nao_constru_fora_alta_2010_q4"))
+CTRL_ALTA_NO_MED <- setdiff(CTRL_ALTA, MEDIATORS_HM)
 CTRL_DELTA_NO_MED <- CTRL_ALTA_NO_MED
+
+# Table 2's estimation sample, defined once (decided 2026-09-30). A
+# municipality is in it when every variable of Table 2's four specifications
+# is non-missing -- the rows fit_safe()'s complete.cases() keeps for each of
+# them. ED Table 4's no-mediator columns are fitted on these rows too, so they
+# differ from the with-mediator columns only by the omitted variables: without
+# this, any missing value in a mediator alone adds municipalities to the
+# no-mediator columns and the R^2 comparison across columns is not nested
+# (the case until the Q4 fill-plus-indicator in prep(), same date).
+# Checked against every fitted Table 2 / ED Table 4 model in section 5.
+VARS_TABLE2 <- unique(unlist(lapply(y_high, function(s) c(s$y, s$trat, s$ctrl))))
+ds_mun$in_table2_sample <- complete.cases(ds_mun[, VARS_TABLE2])
+ds_mun_table2 <- ds_mun %>% filter(in_table2_sample)
+cat(sprintf("\n  Table 2 estimation sample (in_table2_sample): %d of %d municipalities\n",
+            nrow(ds_mun_table2), nrow(ds_mun)))
 
 # Mediator test table (with vs without mediators)
 y_mediators <- list(
@@ -433,6 +478,36 @@ y_interact <- list(
   )
 )
 
+# "Path a" table (requested 2026-09-28): each 2010 housing-market mediator
+# regressed on pre-period compact or sprawl growth, entered separately as in
+# Table 2. Controls are pre-2000 or time-invariant only: every 2010 variable
+# in CTRL_ALTA (pp_alta_2010, log_pib_pc, the other mediators) is measured at
+# the same time as these outcomes and is left out. Same sample
+# (MIN_POP_RISCO_2010 cut above), same listwise rule and same clustering as
+# Table 2, so N varies by mediator.
+MEDIATORS_PATHA <- c(
+  "Q1 vacant safe land" = "pct_nao_constru_fora_alta_2010_q1",
+  "Q4 vacant safe land" = "pct_nao_constru_fora_alta_2010_q4",
+  "median rent"         = "median_rent",
+  "Palma ratio, rent"   = "palma_rent",
+  "Palma ratio, commute"= "palma_commute",
+  "favela share"        = "prop_favelas_2010"
+)
+CTRL_PATHA <- c("topo_prop_inclinado", "log_pop_total_2000", "log_area_2000_km2",
+                "zero_area_2000", "regiao", "urban_class")
+
+# Column k pairs mediator ceiling(k/2) with compact (odd k) or sprawl (even k).
+y_patha <- list()
+for (i in seq_along(MEDIATORS_PATHA)) {
+  for (j in 1:2) {
+    k <- 2 * (i - 1) + j
+    nm <- sprintf("(%d) %s — %s", k, names(MEDIATORS_PATHA)[i], c("Compact", "Sprawl")[j])
+    y_patha[[nm]] <- list(y = MEDIATORS_PATHA[[i]],
+                          trat = c(trat_compact, trat_periph)[j],
+                          ctrl = CTRL_PATHA)
+  }
+}
+
 # =============================================================================
 # 5) ESTIMATE MODELS
 # =============================================================================
@@ -480,10 +555,41 @@ tab_interact_mun <- c(
 )[names(y_interact)]
 
 cat("\n  Mediator test table (with vs without)\n")
-tab_mediators_mun <- fit_specs2(y_mediators, ds_mun, "Mun-Mediators", cluster_col = "NM_CIDADE")
+# The no-mediator columns (5)-(8) on Table 2's sample; the others on ds_mun,
+# where complete.cases() already yields those same rows (checked below).
+is_nomed_spec <- grepl("NO mediators", names(y_mediators), fixed = TRUE)
+tab_mediators_mun <- c(
+  fit_specs2(y_mediators[!is_nomed_spec], ds_mun, "Mun-Mediators",
+             cluster_col = "NM_CIDADE"),
+  fit_specs2(y_mediators[is_nomed_spec], ds_mun_table2, "Mun-Mediators (Table 2 sample)",
+             cluster_col = "NM_CIDADE")
+)[names(y_mediators)]
+
+# Robustness only, not an exhibit: the no-mediator columns on their own
+# complete cases, as ED Table 4 reported them before 2026-09-30.
+tab_nomed_owncc_mun <- fit_specs2(y_mediators[is_nomed_spec], ds_mun,
+                                  "Mun-NoMed (own complete cases)",
+                                  cluster_col = "NM_CIDADE")
+
+# Guard: Table 2 and every ED Table 4 column must be fitted on exactly the
+# in_table2_sample rows, or the ED Table 4 comparison is not nested. Each
+# column's variables are a subset of VARS_TABLE2, so its complete cases
+# contain those rows; an equal N therefore means the same rows.
+n_mediators_check <- vapply(c(tab_main_mun, tab_mediators_mun), function(m)
+  if (is.null(m)) NA_integer_ else as.integer(nobs(m)), integer(1))
+if (any(is.na(n_mediators_check)) || any(n_mediators_check != nrow(ds_mun_table2)))
+  stop("Table 2 / ED Table 4 columns are not all on the in_table2_sample rows (N = ",
+       nrow(ds_mun_table2), "):\n",
+       paste(sprintf("  %s: N = %s", names(n_mediators_check), n_mediators_check),
+             collapse = "\n"))
+cat(sprintf("    Check: Table 2 and all 10 ED Table 4 columns have N = %d\n",
+            nrow(ds_mun_table2)))
 
 cat("\n  Horse-race table (compact + sprawl together)\n")
 tab_horserace_mun <- fit_specs2(y_horserace, ds_mun, "Mun-HorseRace", cluster_col = "NM_CIDADE")
+
+cat("\n  Path-a table (2010 mediators on pre-period growth)\n")
+tab_patha_mun <- fit_specs2(y_patha, ds_mun, "Mun-PathA", cluster_col = "NM_CIDADE")
 
 # =============================================================================
 # 6) VIF FOR THE MAIN MODEL
@@ -511,7 +617,9 @@ model_objects <- list(
   tab_appA_arr      = tab_appA_arr,
   tab_interact_mun  = tab_interact_mun,
   tab_mediators_mun = tab_mediators_mun,
+  tab_nomed_owncc_mun = tab_nomed_owncc_mun,
   tab_horserace_mun = tab_horserace_mun,
+  tab_patha_mun     = tab_patha_mun,
   metadata = list(
     min_pop_risco_2010    = MIN_POP_RISCO_2010,
     n_mun_pre_filter       = n_mun_antes,
@@ -529,4 +637,4 @@ cat("\n", strrep("=", 60), "\n")
 cat("DONE\n")
 cat(strrep("=", 60), "\n")
 cat("\nNext step: run 05_exhibits/table2_and_ed_tables.R to format and export\n")
-cat("Table 2 and ED Tables 2-5 into output/.\n")
+cat("Table 2 and ED Tables 3–6 into output/.\n")

@@ -190,15 +190,16 @@ reg_input("s05_tab1b", output_path("tabela1_populacao_risco_tipo.csv"),
           "Table 1b (table1_population_by_growth_type.R)", rank = "downstream")
 reg_input("s05_edfig", output_path("ed_figure_standardized_coefficients.csv"),
           "ED Figure standardized betas (ed_figure_standardized_coefficients.R)", rank = "downstream")
-reg_input("s05_fig2_variants", output_path("figure2_sample_variants.csv"),
-          "Figure 2 statistics, row '(a) the figure' (figure2_exposure_scatter.R)", rank = "downstream")
+reg_input("s05_fig2_stats", output_path("figure2_statistics.csv"),
+          "Figure 2 statistics, variant '(a) the figure' and the §11 variants (figure2_exposure_scatter.R)",
+          rank = "downstream")
 reg_input("s05_fig1_layers", file.path(stage03_proc_dir, "figuras", "figura1_camadas.parquet"),
           "Figure 1 layers (figure1_growth_type_layers.R)", rank = "downstream")
-reg_input("s05_desc_mun", output_path("ed_table_descriptives_municipality.csv"),
-          "Appendix descriptives, municipality level (ed_table_descriptive_statistics.R)",
+reg_input("s05_desc_mun", output_path("ed_table2_descriptives_municipality.csv"),
+          "ED Table 2 descriptives, municipality level (ed_table_descriptive_statistics.R)",
           rank = "downstream")
-reg_input("s05_desc_arr", output_path("ed_table_descriptives_arrangement.csv"),
-          "Appendix descriptives, arrangement level (ed_table_descriptive_statistics.R)",
+reg_input("s05_desc_arr", output_path("ed_table2_descriptives_arrangement.csv"),
+          "ED Table 2 descriptives, arrangement level (ed_table_descriptive_statistics.R)",
           rank = "downstream")
 
 # ---- robustness --------------------------------------------------------------
@@ -208,14 +209,14 @@ reg_input("rb_sens_sizes", file.path(figures_dir, "sensitivity_min_pop_risco_sam
           "minimum-baseline sweep, sample sizes (robustness/minimum_population_filter.R)", rank = "downstream")
 
 # ---- optional drop-in --------------------------------------------------------
-# ED Table 3's PRE-6f coefficients cannot be recomputed from the current
+# ED Table 5's PRE-6f coefficients cannot be recomputed from the current
 # pipeline: 6f.2 changed stage 03's arrangement denominators, so reproducing
 # them means re-running stage 03 under the old rule. If an archived copy of the
 # pre-6f arrangement coefficients exists as a CSV with columns
 # spec,estimate,std_error,p_value,n_obs it is read; otherwise those entries are
 # PENDING. Nothing is invented.
 reg_input("pre6f_ed3", file.path(data_dir, "pre_6f_ed_table3_coefficients.csv"),
-          "OPTIONAL archived pre-6f ED Table 3 coefficients (supplied by hand, if at all)", rank = "exempt")
+          "OPTIONAL archived pre-6f ED Table 5 coefficients (supplied by hand, if at all)", rank = "exempt")
 
 # =============================================================================
 # 2) STALENESS REFERENCE
@@ -343,15 +344,18 @@ coef_txt <- function(est, se, p) sprintf("%s%s (SE %s)", f4(est), stars_for(p), 
 
 CTRL_ALTA <- c(
   "topo_prop_inclinado", "pp_alta_2010",
-  "pct_nao_constru_fora_alta_2010_q1", "pct_nao_constru_fora_alta_2010_q4",
+  "pct_nao_constru_fora_alta_2010_q1",
+  "pct_nao_constru_fora_alta_2010_q4_f", "no_q4_cells_2010",
   "palma_rent", "palma_commute", "median_rent",
   "log_pib_pc", "log_pop_total_2000", "log_area_2000_km2", "zero_area_2000",
   "prop_favelas_2010", "regiao", "urban_class"
 )
 CTRL_DELTA <- CTRL_ALTA
-CTRL_ALTA_NO_MED <- setdiff(CTRL_ALTA, c("median_rent", "palma_rent", "palma_commute",
-                                          "pct_nao_constru_fora_alta_2010_q1",
-                                          "pct_nao_constru_fora_alta_2010_q4"))
+MEDIATORS_HM <- c("median_rent", "palma_rent", "palma_commute",
+                  "pct_nao_constru_fora_alta_2010_q1",
+                  "pct_nao_constru_fora_alta_2010_q4_f", "no_q4_cells_2010",
+                  "prop_favelas_2010")   # slum share in the block since 2026-09-30
+CTRL_ALTA_NO_MED <- setdiff(CTRL_ALTA, MEDIATORS_HM)
 trat_compact <- "pct_area_densif_infill_0010"
 trat_periph  <- "pct_area_periph_ext_leap_0010"
 TREATMENT_TERMS <- c(trat_compact, trat_periph)
@@ -399,6 +403,7 @@ manifest_lines <- c(
   sprintf("trat_compact       : %s", trat_compact),
   sprintf("trat_periph        : %s", trat_periph),
   sprintf("CTRL_ALTA (%d)      : %s", length(CTRL_ALTA), paste(CTRL_ALTA, collapse = ", ")),
+  sprintf("MEDIATORS_HM (%d)   : %s", length(MEDIATORS_HM), paste(MEDIATORS_HM, collapse = ", ")),
   sprintf("CTRL_ALTA_NO_MED (%d): %s", length(CTRL_ALTA_NO_MED), paste(CTRL_ALTA_NO_MED, collapse = ", ")),
   "vcov: municipalities = vcovCL(cluster = attr(mod, 'cluster_vec')); arrangements = vcovHC(HC3)"
 )
@@ -453,6 +458,42 @@ emit_four_specs <- function(section, mods, vcov_fn, july_map = list(), changed_m
   }
 }
 
+# Every coefficient of one fitted model except `skip`, one row per term, through
+# the vcov the exhibit uses for that model. vcov_clust reads the model's own
+# attr(mod, "cluster_vec"), so each column is clustered on its own estimation
+# sample. Terms dropped as aliased by lm() do not appear in coeftest's output.
+emit_all_terms <- function(section, nm, mod, vcov_fn, skip = character(0)) {
+  ct <- if (is.null(mod)) NULL else
+    tryCatch(lmtest::coeftest(mod, vcov. = vcov_fn(mod)), error = function(e) NULL)
+  if (is.null(ct)) {
+    pending(section, sprintf("%s — all coefficients", nm),
+            "model absent from the .rds or coeftest failed")
+    return(invisible(NULL))
+  }
+  for (term in setdiff(rownames(ct), skip))
+    add(section, sprintf("%s — `%s`", nm, term),
+        coef_txt(ct[term, 1], ct[term, 2], ct[term, 4]), "s04_models")
+  invisible(NULL)
+}
+
+# Wald test of H0: beta_a = beta_b in one fitted model, on the same vcov as its
+# coefficients. With one restriction, F = ((b_a - b_b) / SE(b_a - b_b))^2 on
+# (1, df.residual) -- the same test as
+# car::linearHypothesis(mod, "a = b", vcov. = vcov_fn(mod), test = "F"),
+# written out so no new package is needed, and on the same residual degrees
+# of freedom coeftest() uses for the t-tests in the tables.
+wald_equal <- function(mod, vcov_fn, a, b) {
+  if (is.null(mod)) return(NULL)
+  cf <- stats::coef(mod)
+  V  <- tryCatch(vcov_fn(mod), error = function(e) NULL)
+  if (is.null(V) || !all(c(a, b) %in% names(cf)) || anyNA(cf[c(a, b)])) return(NULL)
+  d  <- unname(cf[a] - cf[b])
+  se <- sqrt(V[a, a] + V[b, b] - 2 * V[a, b])
+  f  <- (d / se)^2
+  data.frame(diff = d, se = se, f = f, df2 = stats::df.residual(mod),
+             p_value = stats::pf(f, 1, stats::df.residual(mod), lower.tail = FALSE))
+}
+
 # =============================================================================
 # 6) SECTIONS
 # =============================================================================
@@ -462,15 +503,21 @@ SEC <- list(
   t1      = "Table 1 — population and exposure by growth type",
   f1      = "Figure 1 — growth-type layers",
   f2      = "Figure 2 — exposure scatter",
+  f2v     = "Figure 2 — sample-definition variants",
   t2      = "Table 2 — main regressions (municipalities)",
-  ed2     = "ED Table 2 — with / without housing-market mediators",
-  ed3     = "ED Table 3 — functional urban areas",
-  ed4     = "ED Table 4 — horse race",
-  ed5     = "ED Table 5 — interactions",
+  t2all   = "Table 2 — all other coefficients, columns (1)-(4)",
+  ed4     = "ED Table 3 — horse race",
+  ed4wald = "ED Table 3 — Wald test, beta_compact = beta_sprawl",
+  ed2     = "ED Table 4 — with / without housing-market mediators",
+  ed2all  = "ED Table 4 — all other coefficients, columns (5)-(10)",
+  ed2own  = "ED Table 4 — columns (5)-(8) on their own complete cases (robustness, not an exhibit)",
+  ed3     = "ED Table 5 — functional urban areas",
+  ed5     = "ED Table 6 — interactions",
+  patha   = "Path a — 2010 mediators on pre-period growth (no exhibit yet)",
   edfig   = "ED Figure — standardized coefficients",
   cover   = "Stage 02 / stage 03 coverage",
   robust  = "Robustness — minimum-baseline sweep",
-  desc    = "Appendix table — descriptive statistics"
+  desc    = "ED Table 2 — descriptive statistics"
 )
 
 # ---- 6.1 Sample funnel -------------------------------------------------------
@@ -767,155 +814,176 @@ if (is.na(fig1_key)) {
 }
 
 # ---- 6.4 Figure 2 (read from the exhibit's own CSV) ------------------------
-# figure2_exposure_scatter.R writes output/figure2_sample_variants.csv. Its row
-# "(a) the figure" is computed on the exact frame the figure is drawn from, so
-# N, the growth-filter breakdown, the medians, the share below 45°, the Wilcoxon
-# p and both fitted lines are READ from it (sourcing rule 1). An earlier version
-# of this block recomputed everything here under its own copy of the sample
-# rule. When f8def75 (2026-09-21) changed the figure's rule, that copy was not
-# updated, and the 2026-09-23 file reported statistics for the retired rule.
-# Reading the exhibit's CSV removes that failure mode.
+# figure2_exposure_scatter.R writes output/figure2_statistics.csv in long
+# format (variant, block, item, value, note): the figure itself as variant
+# "(a) the figure", and every sample-definition variant of its section 11.
+# Every Figure 2 row below is READ from that file (sourcing rule 1). Nothing is
+# recomputed here and nothing is clipped: since 2026-09-25 the figure and all
+# its statistics use the ratios as computed.
 #
-# The CSV does not carry Pearson, Spearman, the slope's SE or R², which the
-# script prints to console only. Those four are recomputed here on the same
-# municipalities: the growth threshold is parsed from the row's own `rule`
-# text rather than copied as a constant. They are reported only if the
-# recomputed frame reproduces the row's N and clipped slope; otherwise they are
-# PENDING.
+# History: until 2026-09-23 this block recomputed the sample under its own copy
+# of the rule and reported the rule retired on 2026-09-21; from then until
+# 2026-09-25 it read figure2_sample_variants.csv, which carried clipped fits.
+#
+# All values are collected before any row is added, so a missing item turns
+# the whole block PENDING instead of leaving it half written.
 
-f2_items <- list("Sample rule",
-                 "Metrics municipalities (before any filter)",
-                 "Regression-dataset municipalities with metrics",
-                 "Final N (growth threshold met in both types)",
-                 "Dropped by the growth threshold",
-                 "Dropped — compact only / sprawl only / both",
-                 "Median pct_risk_compact", "Median pct_risk_sprawl",
-                 "Median difference (compact − sprawl)",
-                 "Share below 45° line (compact > sprawl)",
-                 "Wilcoxon signed-rank p",
-                 "Fitted slope (clipped, the plotted line)", "Fitted intercept (clipped)",
-                 "Fitted slope (unclipped)",
-                 "Pearson correlation", "Spearman correlation",
-                 "Fitted slope SE (clipped)", "Fitted R² (clipped)")
+FIG2_MAIN <- "(a) the figure"
 
-guarded(SEC$f2, c("s05_fig2_variants"), f2_items, function() {
-  var <- readr::read_csv(inp_path("s05_fig2_variants"), show_col_types = FALSE, progress = FALSE)
-  row <- var[var$variant == "(a) the figure", , drop = FALSE]
-  if (nrow(row) != 1)
-    stop(sprintf("expected exactly one row with variant == '(a) the figure' in %s, found %d",
-                 rel_path(inp_path("s05_fig2_variants")), nrow(row)))
+f2_items <- list(
+  "Sample rule", "Metrics municipalities (before any filter)",
+  "Regression-dataset municipalities with metrics",
+  "Final N (growth threshold met in both types)",
+  "Dropped by the growth threshold", "Dropped — compact only / sprawl only / both",
+  "Ratios < 0 / > 1 — compact", "Ratios < 0 / > 1 — sprawl", "Both ratios < 0",
+  "Above the 45° line (sprawl > compact)", "Share below 45° line (compact > sprawl)",
+  "On the 45° line (ties)",
+  "Median pct_risk_compact", "Median pct_risk_sprawl",
+  "Median difference (compact − sprawl)", "Interquartile range of the difference",
+  "Wilcoxon signed-rank p", "Wilcoxon V and pairs used",
+  "Spearman correlation", "Pearson correlation",
+  "OLS slope (the plotted line)", "OLS intercept", "OLS R²", "OLS p for H0: slope = 1",
+  "OLS crossing with the 45° line (compact ratio)",
+  "Municipalities with compact ratio above the crossing point")
 
-  src <- "s05_fig2_variants"
-  row_note <- "row '(a) the figure' of the exhibit's own CSV"
+read_fig2_stats <- function() {
+  st <- readr::read_csv(inp_path("s05_fig2_stats"), show_col_types = FALSE, progress = FALSE)
+  miss <- setdiff(c("variant", "block", "item", "value", "note"), names(st))
+  if (length(miss) > 0)
+    stop(sprintf("%s lacks columns: %s", rel_path(inp_path("s05_fig2_stats")),
+                 paste(miss, collapse = ", ")))
+  st
+}
 
-  add(SEC$f2, "Sample rule", row$rule, src,
-      changed_by = "decided 2026-09-21 (f8def75), reverses 6c2",
-      note = row_note)
-  add(SEC$f2, "Metrics municipalities (before any filter)", n_fmt(row$n_metrics), src, note = row_note)
-  add(SEC$f2, "Regression-dataset municipalities with metrics", n_fmt(row$n_in_universe), src,
-      note = row_note)
-  add(SEC$f2, "Final N (growth threshold met in both types)", n_fmt(row$n_final), src,
-      july = "341 (results_used.md L50, '43% of 341 cities')",
-      changed_by = "6b0, 6e, sample rule of 2026-09-21",
-      note = paste(row_note, "; this is the N printed in both subtitles"))
-  add(SEC$f2, "Dropped by the growth threshold", n_fmt(row$dropped_by_growth), src, note = row_note)
-  add(SEC$f2, "Dropped — compact only / sprawl only / both",
-      sprintf("%s / %s / %s", n_fmt(row$dropped_compact_only), n_fmt(row$dropped_sprawl_only),
-              n_fmt(row$dropped_both)), src,
-      note = paste(row_note, "; requiring growth in both types excludes municipalities that grew almost entirely one way"))
-  add(SEC$f2, "Median pct_risk_compact", pct1(100 * row$median_compact), src,
-      july = "18.2%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = row_note)
-  add(SEC$f2, "Median pct_risk_sprawl", pct1(100 * row$median_sprawl), src,
-      july = "20.9%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = row_note)
-  add(SEC$f2, "Median difference (compact − sprawl)", f3(row$median_diff), src, note = row_note)
-  add(SEC$f2, "Share below 45° line (compact > sprawl)", pct1(100 * row$share_below_45), src,
-      july = "43%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = row_note)
-  add(SEC$f2, "Wilcoxon signed-rank p", f4(row$wilcoxon_p), src,
-      status = if (is.na(row$wilcoxon_p)) "PENDING" else "VERIFIED", note = row_note)
-  add(SEC$f2, "Fitted slope (clipped, the plotted line)", f3(row$slope_clipped), src,
-      july = "slope < 45° with positive intercept (no value stated)",
-      changed_by = "6b0, 6e, sample rule of 2026-09-21",
-      note = paste(row_note, "; fitted on the [0,1]-clipped variables, as drawn"))
-  add(SEC$f2, "Fitted intercept (clipped)", f3(row$intercept_clipped), src, note = row_note)
-  add(SEC$f2, "Fitted slope (unclipped)", f3(row$slope_unclipped), src,
-      note = paste(row_note, "; the [0,1] clip is an open decision (pipeline_5.md §9)"))
+# One cell of the long file; errors unless exactly one row matches.
+fig2_cell <- function(st, variant, item, col = "value") {
+  v <- st[[col]][st$variant == variant & st$item == item]
+  if (length(v) != 1)
+    stop(sprintf("variant '%s', item '%s': expected 1 row, found %d", variant, item, length(v)))
+  v
+}
 
-  # --- the four console-only statistics, recomputed and checked --------------
-  recomputed <- c("Pearson correlation", "Spearman correlation",
-                  "Fitted slope SE (clipped)", "Fitted R² (clipped)")
-  prob <- unlist(lapply(c("s03_metricas_mun", "s04_ds_mun"), input_problem))
-  g <- suppressWarnings(as.numeric(sub(".*growth >= ([0-9]+).*", "\\1", row$rule)))
-  if (length(prob) > 0 || is.na(g)) {
-    reason <- if (length(prob) > 0) paste(unique(prob), collapse = "; ")
-              else sprintf("could not parse the growth threshold from the rule text '%s'", row$rule)
-    for (it in recomputed) pending(SEC$f2, it, reason)
-    return(invisible(NULL))
+guarded(SEC$f2, c("s05_fig2_stats"), f2_items, function() {
+  st <- read_fig2_stats()
+  g  <- function(it) fig2_cell(st, FIG2_MAIN, it)
+
+  rule     <- fig2_cell(st, FIG2_MAIN, "rule", "note")
+  tie_note <- fig2_cell(st, FIG2_MAIN, "n_ties", "note")
+  v <- list(
+    n_metrics = g("n_metrics"), n_universe = g("n_universe"), n_final = g("n_final"),
+    dc = g("dropped_compact_only"), ds = g("dropped_sprawl_only"), db = g("dropped_both"),
+    n_pairs = g("n_pairs"),
+    c_lt0 = g("n_compact_lt0"), c_gt1 = g("n_compact_gt1"),
+    s_lt0 = g("n_sprawl_lt0"),  s_gt1 = g("n_sprawl_gt1"), b_lt0 = g("n_both_lt0"),
+    above = g("n_above"), p_above = g("pct_above"),
+    below = g("n_below"), p_below = g("pct_below"),
+    ties  = g("n_ties"),  p_ties  = g("pct_ties"), ties0 = g("n_ties_both_zero"),
+    med_c = g("median_compact"), med_s = g("median_sprawl"), med_d = g("median_diff"),
+    q1 = g("diff_q1"), q3 = g("diff_q3"),
+    w_p = g("wilcoxon_p"), w_v = g("wilcoxon_V"), w_n = g("wilcoxon_n_pairs_used"),
+    sp_r = g("spearman_rho"), sp_p = g("spearman_p"),
+    pe_r = g("pearson_r"),    pe_p = g("pearson_p"),
+    slope = g("ols_slope"), se = g("ols_slope_se"), icpt = g("ols_intercept"),
+    r2 = g("ols_r2"), p1 = g("ols_p_slope_eq_1"),
+    cross = g("crossing_x"), n_cross = g("n_compact_above_crossing")
+  )
+
+  src <- "s05_fig2_stats"
+  rn  <- "variant '(a) the figure' of the exhibit's own CSV; unclipped ratios"
+  # PENDING if any number behind the row is missing from the CSV.
+  f2_add <- function(item, value, raw, note = rn, ...) {
+    bad <- anyNA(unlist(raw))
+    add(SEC$f2, item, value, src, status = if (bad) "PENDING" else "VERIFIED",
+        note = if (bad) paste(note, "; value missing in the CSV") else note, ...)
   }
 
-  met <- readr::read_csv(inp_path("s03_metricas_mun"), show_col_types = FALSE, progress = FALSE)
-  reg <- readr::read_csv(inp_path("s04_ds_mun"),       show_col_types = FALSE, progress = FALSE)
+  f2_add("Sample rule", rule, rule,
+         changed_by = "decided 2026-09-21 (f8def75), reverses 6c2")
+  f2_add("Metrics municipalities (before any filter)", n_fmt(v$n_metrics), v$n_metrics)
+  f2_add("Regression-dataset municipalities with metrics", n_fmt(v$n_universe), v$n_universe)
+  f2_add("Final N (growth threshold met in both types)", n_fmt(v$n_final), v$n_final,
+         july = "341 (results_used.md L50, '43% of 341 cities')",
+         changed_by = "6b0, 6e, sample rule of 2026-09-21")
+  f2_add("Dropped by the growth threshold", n_fmt(v$dc + v$ds + v$db), c(v$dc, v$ds, v$db))
+  f2_add("Dropped — compact only / sprawl only / both",
+         sprintf("%s / %s / %s", n_fmt(v$dc), n_fmt(v$ds), n_fmt(v$db)), c(v$dc, v$ds, v$db),
+         note = paste(rn, "; requiring growth in both types excludes municipalities that grew almost entirely one way"))
 
-  # Same construction as figure2_exposure_scatter.R §3-§5.
-  df <- met %>% mutate(
-    delta_sprawl_risk  = (pop_2022_risk_extension - pop_2010_risk_extension) +
-                         (pop_2022_risk_leapfrog  - pop_2010_risk_leapfrog) +
-                         (pop_2022_risk_peripheral - pop_2010_risk_peripheral),
-    delta_sprawl_total = (pop_2022_extension - pop_2010_extension) +
-                         (pop_2022_leapfrog  - pop_2010_leapfrog) +
-                         (pop_2022_peripheral - pop_2010_peripheral),
-    delta_compact_risk = (pop_2022_risk_densification - pop_2010_risk_densification) +
-                         (pop_2022_risk_infill        - pop_2010_risk_infill),
-    delta_compact_total= (pop_2022_densification - pop_2010_densification) +
-                         (pop_2022_infill        - pop_2010_infill),
-    pct_risk_sprawl  = delta_sprawl_risk  / delta_sprawl_total,
-    pct_risk_compact = delta_compact_risk / delta_compact_total
-  ) %>%
-    mutate(cod_mun = as.character(cod_mun)) %>%
-    inner_join(reg %>% transmute(cod_mun = as.character(cod_mun)) %>% distinct(), by = "cod_mun")
+  oor_note <- sprintf("%s; out of %s pairs; kept in every statistic", rn, n_fmt(v$n_pairs))
+  f2_add("Ratios < 0 / > 1 — compact", sprintf("%s / %s", n_fmt(v$c_lt0), n_fmt(v$c_gt1)),
+         c(v$c_lt0, v$c_gt1), note = oor_note)
+  f2_add("Ratios < 0 / > 1 — sprawl", sprintf("%s / %s", n_fmt(v$s_lt0), n_fmt(v$s_gt1)),
+         c(v$s_lt0, v$s_gt1), note = oor_note)
+  f2_add("Both ratios < 0", n_fmt(v$b_lt0), v$b_lt0, note = oor_note)
 
-  keep <- !is.na(df$delta_compact_total) & df$delta_compact_total >= g &
-          !is.na(df$delta_sprawl_total)  & df$delta_sprawl_total  >= g
-  d <- df[keep, , drop = FALSE] %>%
-    mutate(pct_risk_sprawl_cl  = pmin(pmax(pct_risk_sprawl, 0), 1),
-           pct_risk_compact_cl = pmin(pmax(pct_risk_compact, 0), 1))
+  diag_note <- paste(rn, ";", tie_note, "; shares are of all pairs")
+  f2_add("Above the 45° line (sprawl > compact)",
+         sprintf("%s (%s)", n_fmt(v$above), pct1(v$p_above)), c(v$above, v$p_above), note = diag_note)
+  f2_add("Share below 45° line (compact > sprawl)",
+         sprintf("%s (%s)", n_fmt(v$below), pct1(v$p_below)), c(v$below, v$p_below),
+         july = "43%", changed_by = "6b0, 6e, sample rule of 2026-09-21", note = diag_note)
+  f2_add("On the 45° line (ties)",
+         sprintf("%s (%s); both ratios zero: %s", n_fmt(v$ties), pct1(v$p_ties), n_fmt(v$ties0)),
+         c(v$ties, v$p_ties, v$ties0), note = diag_note)
 
-  lmf <- tryCatch(lm(pct_risk_sprawl_cl ~ pct_risk_compact_cl, data = d), error = function(e) NULL)
-  mismatch <- if (nrow(d) != row$n_final)
-    sprintf("recomputed N = %d does not match the CSV's n_final = %d", nrow(d), row$n_final)
-  else if (is.null(lmf) || abs(unname(coef(lmf)[2]) - row$slope_clipped) > 1e-8)
-    "recomputed clipped slope does not match the CSV's slope_clipped"
-  else NULL
-  if (!is.null(mismatch)) {
-    for (it in recomputed)
-      pending(SEC$f2, it, paste(mismatch, "-- this block no longer reproduces the figure's frame"))
-    return(invisible(NULL))
-  }
+  f2_add("Median pct_risk_compact", pct1(100 * v$med_c), v$med_c,
+         july = "18.2%", changed_by = "6b0, 6e, sample rule of 2026-09-21")
+  f2_add("Median pct_risk_sprawl", pct1(100 * v$med_s), v$med_s,
+         july = "20.9%", changed_by = "6b0, 6e, sample rule of 2026-09-21")
+  f2_add("Median difference (compact − sprawl)", f3(v$med_d), v$med_d,
+         note = paste(rn, "; positive = below the 45° line"))
+  f2_add("Interquartile range of the difference", sprintf("[%s, %s]", f3(v$q1), f3(v$q3)),
+         c(v$q1, v$q3), note = paste(rn, "; compact − sprawl, quantile type 7"))
 
-  two_files <- sprintf("`%s` (%s) + `%s` (%s)",
-                       rel_path(inp_path("s03_metricas_mun")), fmt_mtime(inp_mtime("s03_metricas_mun")),
-                       rel_path(inp_path("s04_ds_mun")),       fmt_mtime(inp_mtime("s04_ds_mun")))
-  rc_note <- sprintf(paste("recomputed here (the CSV does not carry it) on growth >= %d in both types;",
-                           "checked against the CSV's N and clipped slope"), g)
+  f2_add("Wilcoxon signed-rank p", f4(v$w_p), v$w_p,
+         note = paste(rn, "; paired, two-sided, normal approximation with continuity correction"))
+  f2_add("Wilcoxon V and pairs used",
+         sprintf("V = %s; %s pairs", fmt_vec(v$w_v, function(x) sprintf("%.1f", x)), n_fmt(v$w_n)),
+         c(v$w_v, v$w_n),
+         note = paste(rn, "; V = rank sum of positive (compact − sprawl) differences; exactly-zero differences dropped"))
 
-  cp <- tryCatch(cor.test(d$pct_risk_sprawl, d$pct_risk_compact, method = "pearson"),
-                 error = function(e) NULL)
-  cs <- tryCatch(suppressWarnings(cor.test(d$pct_risk_sprawl, d$pct_risk_compact, method = "spearman")),
-                 error = function(e) NULL)
-  add(SEC$f2, "Pearson correlation",
-      if (is.null(cp)) NA_character_ else sprintf("%s (p = %s)", f3(cp$estimate), f4(cp$p.value)),
-      source_label = two_files, status = if (is.null(cp)) "PENDING" else "VERIFIED",
-      note = paste(rc_note, "; on the unclipped ratios, as the script prints it"))
-  add(SEC$f2, "Spearman correlation",
-      if (is.null(cs)) NA_character_ else sprintf("%s (p = %s)", f3(cs$estimate), f4(cs$p.value)),
-      source_label = two_files, status = if (is.null(cs)) "PENDING" else "VERIFIED",
-      note = paste(rc_note, "; on the unclipped ratios, as the script prints it"))
-  sm <- summary(lmf)
-  add(SEC$f2, "Fitted slope SE (clipped)", f3(sm$coefficients[2, 2]),
-      source_label = two_files, note = rc_note)
-  add(SEC$f2, "Fitted R² (clipped)", f3(sm$r.squared), source_label = two_files, note = rc_note)
+  f2_add("Spearman correlation", sprintf("%s (p = %s)", f3(v$sp_r), f4(v$sp_p)), c(v$sp_r, v$sp_p),
+         note = paste(rn, "; p by asymptotic t approximation (ties present, no exact p)"))
+  f2_add("Pearson correlation", sprintf("%s (p = %s)", f3(v$pe_r), f4(v$pe_p)), c(v$pe_r, v$pe_p))
+
+  f2_add("OLS slope (the plotted line)", sprintf("%s (SE %s)", f3(v$slope), f3(v$se)),
+         c(v$slope, v$se),
+         july = "slope < 45° with positive intercept (no value stated)",
+         changed_by = "6b0, 6e, sample rule of 2026-09-21; unclipped since 2026-09-25")
+  f2_add("OLS intercept", f3(v$icpt), v$icpt)
+  f2_add("OLS R²", f3(v$r2), v$r2)
+  f2_add("OLS p for H0: slope = 1", f4(v$p1), v$p1)
+  f2_add("OLS crossing with the 45° line (compact ratio)",
+         sprintf("%s (%s)", f3(v$cross), pct1(100 * v$cross)), v$cross,
+         note = paste(rn, "; intercept / (1 − slope)"))
+  f2_add("Municipalities with compact ratio above the crossing point", n_fmt(v$n_cross), v$n_cross)
 })
 
-# ---- 6.5 Table 2 / ED Tables 2-5 --------------------------------------------
+# ---- 6.4b Figure 2 — sample-definition variants -----------------------------
+# One row per variant of figure2_exposure_scatter.R §11, read from the same
+# CSV. Variant "(b) G = 200" reproduces "(a) the figure" by construction.
+
+guarded(SEC$f2v, c("s05_fig2_stats"), list("Sample-definition variants"), function() {
+  st <- read_fig2_stats()
+  rows <- lapply(unique(st$variant), function(vn) {
+    g <- function(it) fig2_cell(st, vn, it)
+    list(variant = vn, rule = fig2_cell(st, vn, "rule", "note"),
+         raw = c(n = g("n_final"), above = g("n_above"), below = g("n_below"), ties = g("n_ties"),
+                 md = g("median_diff"), wp = g("wilcoxon_p"), sr = g("spearman_rho")))
+  })
+  for (r in rows) {
+    x <- r$raw
+    add(SEC$f2v, r$variant,
+        sprintf("N = %s; above / below / ties = %s / %s / %s; median diff (compact − sprawl) = %s; Wilcoxon p = %s; Spearman rho = %s",
+                n_fmt(x[["n"]]), n_fmt(x[["above"]]), n_fmt(x[["below"]]), n_fmt(x[["ties"]]),
+                f3(x[["md"]]), f4(x[["wp"]]), f3(x[["sr"]])),
+        "s05_fig2_stats",
+        status = if (anyNA(x)) "PENDING" else "VERIFIED",
+        note = paste(r$rule, "; unclipped ratios", if (anyNA(x)) "; value missing in the CSV" else ""))
+  }
+})
+
+# ---- 6.5 Table 2 / ED Tables 3-6 --------------------------------------------
 
 JULY_T2 <- list(
   "(1) g_high — Compact"   = "−0.026 n.s.",
@@ -939,8 +1007,15 @@ if (is.null(models_problem) && !is.null(model_objects)) {
                    "MIN_POP_RISCO_2010 cut (`:205–207`). This is why N varies by specification;",
                    "results_used.md's Table 2 note names a narrower set than the code uses."))
 
-  # ED Table 2 / 4 / 5: N and R^2 per column; treatment coefficients where a
-  # treatment term is in the fit (specs 9-10 of ED Table 2 have none by design).
+  # Every coefficient other than the treatment (reported above), requested
+  # 2026-09-28 for the regression section: controls, region and urban-class
+  # dummies, intercept. Same clustered vcov as the table.
+  for (nm in names(model_objects$tab_main_mun))
+    emit_all_terms(SEC$t2all, nm, model_objects$tab_main_mun[[nm]], vcov_clust,
+                   skip = TREATMENT_TERMS)
+
+  # ED Table 4 / 3 / 6: N and R^2 per column; treatment coefficients where a
+  # treatment term is in the fit (specs 9-10 of ED Table 4 have none by design).
   for (nm in names(model_objects$tab_mediators_mun)) {
     mod <- model_objects$tab_mediators_mun[[nm]]
     tt  <- model_terms(mod, vcov_clust, TREATMENT_TERMS)
@@ -952,6 +1027,24 @@ if (is.null(models_problem) && !is.null(model_objects)) {
     add(SEC$ed2, sprintf("%s — R²", nm), f3(model_r2(mod)), "s04_models")
   }
 
+  # Robustness (2026-09-30): columns (5)-(8) on their own complete cases, as
+  # ED Table 4 reported them before they moved to Table 2's sample. Read next
+  # to the ED Table 4 rows above for the old-vs-new comparison.
+  if (is.null(model_objects$tab_nomed_owncc_mun)) {
+    pending(SEC$ed2own, "All columns",
+            "tab_nomed_owncc_mun not in model_objects_table2.rds -- re-run 16_estimate_models.R")
+  } else {
+    emit_four_specs(SEC$ed2own, model_objects$tab_nomed_owncc_mun, vcov_clust)
+  }
+
+  # Columns (5)-(10) -- no mediators and mediators only: every coefficient
+  # other than the treatment (reported above), requested 2026-09-28.
+  # Columns (1)-(4) are Table 2's specifications and are covered there.
+  ed2_rest <- grep("^\\((5|6|7|8|9|10)\\) ", names(model_objects$tab_mediators_mun), value = TRUE)
+  for (nm in ed2_rest)
+    emit_all_terms(SEC$ed2all, nm, model_objects$tab_mediators_mun[[nm]], vcov_clust,
+                   skip = TREATMENT_TERMS)
+
   for (nm in names(model_objects$tab_horserace_mun)) {
     mod <- model_objects$tab_horserace_mun[[nm]]
     tt  <- model_terms(mod, vcov_clust, TREATMENT_TERMS)
@@ -962,6 +1055,32 @@ if (is.null(models_problem) && !is.null(model_objects)) {
     add(SEC$ed4, sprintf("%s — R²", nm), f3(model_r2(mod)), "s04_models")
   }
 
+  # Wald test of beta_compact = beta_sprawl in each ED Table 3 column,
+  # requested 2026-09-28, on the table's own clustered vcov.
+  for (nm in names(model_objects$tab_horserace_mun)) {
+    w <- wald_equal(model_objects$tab_horserace_mun[[nm]], vcov_clust, trat_compact, trat_periph)
+    if (is.null(w)) {
+      pending(SEC$ed4wald, sprintf("%s — Wald test", nm),
+              "model absent from the .rds or a treatment term not in the fit")
+    } else {
+      add(SEC$ed4wald, sprintf("%s — beta_compact − beta_sprawl", nm),
+          coef_txt(w$diff, w$se, w$p_value), "s04_models",
+          note = sprintf("`%s` − `%s`; clustered vcov", trat_compact, trat_periph))
+      add(SEC$ed4wald, sprintf("%s — Wald F(1, %d)", nm, w$df2), f3(w$f), "s04_models")
+      add(SEC$ed4wald, sprintf("%s — Wald p-value", nm), f4(w$p_value), "s04_models")
+    }
+  }
+
+  # Path a (requested 2026-09-28): treatment coefficient, N and R² per column.
+  # A .rds fitted before 16_estimate_models.R gained this block has no
+  # tab_patha_mun; that is reported as PENDING, not skipped.
+  if (is.null(model_objects$tab_patha_mun)) {
+    pending(SEC$patha, "All path-a columns",
+            "tab_patha_mun not in model_objects_table2.rds -- re-run 16_estimate_models.R")
+  } else {
+    emit_four_specs(SEC$patha, model_objects$tab_patha_mun, vcov_clust)
+  }
+
   for (nm in names(model_objects$tab_interact_mun)) {
     mod <- model_objects$tab_interact_mun[[nm]]
     add(SEC$ed5, sprintf("%s — N", nm), n_fmt(model_n(mod)), "s04_models",
@@ -969,10 +1088,10 @@ if (is.null(models_problem) && !is.null(model_objects)) {
     add(SEC$ed5, sprintf("%s — R²", nm), f3(model_r2(mod)), "s04_models")
   }
 
-  # ---- ED Table 3: post-6f (computed) and pre-6f (PENDING unless supplied) ----
+  # ---- ED Table 5: post-6f (computed) and pre-6f (PENDING unless supplied) ----
   # N and R2 only. The treatment coefficient is emitted once, below, as the
   # post-6f half of the pre/post pair -- emitting it here too would list every
-  # ED Table 3 coefficient twice under two labels.
+  # ED Table 5 coefficient twice under two labels.
   for (nm in names(model_objects$tab_appA_arr)) {
     mod <- model_objects$tab_appA_arr[[nm]]
     add(SEC$ed3, sprintf("%s — N", nm), n_fmt(model_n(mod)), "s04_models")
@@ -1021,7 +1140,7 @@ if (is.null(models_problem) && !is.null(model_objects)) {
   }
 } else {
   reason <- if (is.null(models_problem)) "model_objects_table2.rds unavailable" else models_problem
-  for (sec in c(SEC$t2, SEC$ed2, SEC$ed3, SEC$ed4, SEC$ed5))
+  for (sec in c(SEC$t2, SEC$t2all, SEC$ed2, SEC$ed2all, SEC$ed2own, SEC$ed3, SEC$ed4, SEC$ed4wald, SEC$ed5, SEC$patha))
     pending(sec, "All coefficients, N and R² for this exhibit", reason)
   pending(SEC$t2, "Listwise deletion rule", reason,
           july = "list-wise deletion on safe available land and steep terrain (results_used.md L11)")
