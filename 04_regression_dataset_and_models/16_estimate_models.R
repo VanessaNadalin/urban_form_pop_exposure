@@ -42,9 +42,6 @@
 #                        Table 2's estimation sample, in_table2_sample, so the
 #                        comparison is nested -- MIGRATION_HISTORY.md Part 2,
 #                        2026-09-30)
-#   tab_nomed_owncc_mun -> no exhibit; robustness only: columns (5)-(8) on
-#                        their own complete cases, as they were before
-#                        2026-09-30
 #   tab_horserace_mun -> ED Table 3 (compact and sprawl entered jointly, 2 cols)
 #   tab_patha_mun     -> no exhibit yet; reported in results_targets_v2.md
 #                        ("path a": each 2010 housing-market mediator on
@@ -565,12 +562,6 @@ tab_mediators_mun <- c(
              cluster_col = "NM_CIDADE")
 )[names(y_mediators)]
 
-# Robustness only, not an exhibit: the no-mediator columns on their own
-# complete cases, as ED Table 4 reported them before 2026-09-30.
-tab_nomed_owncc_mun <- fit_specs2(y_mediators[is_nomed_spec], ds_mun,
-                                  "Mun-NoMed (own complete cases)",
-                                  cluster_col = "NM_CIDADE")
-
 # Guard: Table 2 and every ED Table 4 column must be fitted on exactly the
 # in_table2_sample rows, or the ED Table 4 comparison is not nested. Each
 # column's variables are a subset of VARS_TABLE2, so its complete cases
@@ -617,7 +608,6 @@ model_objects <- list(
   tab_appA_arr      = tab_appA_arr,
   tab_interact_mun  = tab_interact_mun,
   tab_mediators_mun = tab_mediators_mun,
-  tab_nomed_owncc_mun = tab_nomed_owncc_mun,
   tab_horserace_mun = tab_horserace_mun,
   tab_patha_mun     = tab_patha_mun,
   metadata = list(

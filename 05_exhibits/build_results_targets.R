@@ -202,12 +202,6 @@ reg_input("s05_desc_arr", output_path("ed_table2_descriptives_arrangement.csv"),
           "ED Table 2 descriptives, arrangement level (ed_table_descriptive_statistics.R)",
           rank = "downstream")
 
-# ---- robustness --------------------------------------------------------------
-reg_input("rb_sensitivity", file.path(figures_dir, "sensitivity_min_pop_risco.csv"),
-          "minimum-baseline sweep (robustness/minimum_population_filter.R)", rank = "downstream")
-reg_input("rb_sens_sizes", file.path(figures_dir, "sensitivity_min_pop_risco_sample_sizes.csv"),
-          "minimum-baseline sweep, sample sizes (robustness/minimum_population_filter.R)", rank = "downstream")
-
 # ---- optional drop-in --------------------------------------------------------
 # ED Table 5's PRE-6f coefficients cannot be recomputed from the current
 # pipeline: 6f.2 changed stage 03's arrangement denominators, so reproducing
@@ -510,13 +504,11 @@ SEC <- list(
   ed4wald = "ED Table 3 — Wald test, beta_compact = beta_sprawl",
   ed2     = "ED Table 4 — with / without housing-market mediators",
   ed2all  = "ED Table 4 — all other coefficients, columns (5)-(10)",
-  ed2own  = "ED Table 4 — columns (5)-(8) on their own complete cases (robustness, not an exhibit)",
   ed3     = "ED Table 5 — functional urban areas",
   ed5     = "ED Table 6 — interactions",
   patha   = "Path a — 2010 mediators on pre-period growth (no exhibit yet)",
   edfig   = "ED Figure — standardized coefficients",
   cover   = "Stage 02 / stage 03 coverage",
-  robust  = "Robustness — minimum-baseline sweep",
   desc    = "ED Table 2 — descriptive statistics"
 )
 
@@ -1027,16 +1019,6 @@ if (is.null(models_problem) && !is.null(model_objects)) {
     add(SEC$ed2, sprintf("%s — R²", nm), f3(model_r2(mod)), "s04_models")
   }
 
-  # Robustness (2026-09-30): columns (5)-(8) on their own complete cases, as
-  # ED Table 4 reported them before they moved to Table 2's sample. Read next
-  # to the ED Table 4 rows above for the old-vs-new comparison.
-  if (is.null(model_objects$tab_nomed_owncc_mun)) {
-    pending(SEC$ed2own, "All columns",
-            "tab_nomed_owncc_mun not in model_objects_table2.rds -- re-run 16_estimate_models.R")
-  } else {
-    emit_four_specs(SEC$ed2own, model_objects$tab_nomed_owncc_mun, vcov_clust)
-  }
-
   # Columns (5)-(10) -- no mediators and mediators only: every coefficient
   # other than the treatment (reported above), requested 2026-09-28.
   # Columns (1)-(4) are Table 2's specifications and are covered there.
@@ -1140,7 +1122,7 @@ if (is.null(models_problem) && !is.null(model_objects)) {
   }
 } else {
   reason <- if (is.null(models_problem)) "model_objects_table2.rds unavailable" else models_problem
-  for (sec in c(SEC$t2, SEC$t2all, SEC$ed2, SEC$ed2all, SEC$ed2own, SEC$ed3, SEC$ed4, SEC$ed4wald, SEC$ed5, SEC$patha))
+  for (sec in c(SEC$t2, SEC$t2all, SEC$ed2, SEC$ed2all, SEC$ed3, SEC$ed4, SEC$ed4wald, SEC$ed5, SEC$patha))
     pending(sec, "All coefficients, N and R² for this exhibit", reason)
   pending(SEC$t2, "Listwise deletion rule", reason,
           july = "list-wise deletion on safe available land and steep terrain (results_used.md L11)")
@@ -1214,85 +1196,7 @@ guarded(SEC$cover, c("s03_metricas_arr"), list("Arrangements emitted by stage-03
                    "qualified CD_CIDADEs and `15_final_dataset.R:123–127` re-adds the isolated ones"))
 })
 
-# ---- 6.8 Robustness ----------------------------------------------------------
-
-# Significance tier, as the tables star it: 1%, 5%, 10%, or none.
-sig_tier <- function(p) {
-  p <- suppressWarnings(as.numeric(p))[1]
-  if (is.na(p)) return(NA_character_)
-  if (p < 0.01) return("1%"); if (p < 0.05) return("5%")
-  if (p < 0.10) return("10%"); "n.s."
-}
-
-guarded(SEC$robust, c("rb_sensitivity"), list("Minimum-baseline sweep"), function() {
-  d <- readr::read_csv(inp_path("rb_sensitivity"), show_col_types = FALSE, progress = FALSE)
-  need <- c("cut", "level", "spec", "estimate", "std_error", "p_value", "n_obs")
-  if (!all(need %in% names(d))) stop(sprintf("unexpected columns: %s", paste(names(d), collapse = ", ")))
-
-  # --- one row per (cut, level, spec) -----------------------------------------
-  for (i in seq_len(nrow(d)))
-    add(SEC$robust, sprintf("cut > %s — %s — %s", d$cut[i], d$level[i], d$spec[i]),
-        sprintf("%s, N = %s", coef_txt(d$estimate[i], d$std_error[i], d$p_value[i]), n_fmt(d$n_obs[i])),
-        "rb_sensitivity",
-        note = if (isTRUE(d$is_pipeline_cut[i])) "pipeline reference cut" else NA_character_)
-
-  # --- stability of each specification ACROSS the cuts -------------------------
-  # Thirty-two rows do not say which conclusions depend on where the cut is
-  # placed. These rows answer that directly, per (level, spec): does the sign
-  # hold, and does the significance tier hold? Both are reported as facts about
-  # the sweep -- whether a given change matters is not decided here.
-  n_sign_changes <- 0L
-  n_sig_changes  <- 0L
-
-  for (lv in unique(d$level)) {
-    for (sp in unique(d$spec[d$level == lv])) {
-      g <- d[d$level == lv & d$spec == sp, , drop = FALSE]
-      g <- g[order(g$cut), , drop = FALSE]
-      if (nrow(g) == 0) next
-
-      tiers  <- vapply(g$p_value, sig_tier, character(1))
-      signs  <- ifelse(is.na(g$estimate), NA_character_, ifelse(g$estimate < 0, "−", "+"))
-      per_cut <- paste(sprintf("%s: %s %s", g$cut, f4(g$estimate), tiers), collapse = "; ")
-
-      sign_stable <- length(unique(na.omit(signs))) <= 1L
-      sig_stable  <- length(unique(na.omit(tiers))) <= 1L
-      if (!sign_stable) n_sign_changes <- n_sign_changes + 1L
-      if (!sig_stable)  n_sig_changes  <- n_sig_changes  + 1L
-
-      verdict <- paste0(
-        if (sign_stable) sprintf("sign STABLE (%s)", unique(na.omit(signs))[1]) else "sign CHANGES",
-        "; ",
-        if (sig_stable) sprintf("significance STABLE (%s at every cut)", unique(na.omit(tiers))[1])
-        else sprintf("significance CHANGES (%s)", paste(unique(na.omit(tiers)), collapse = " / "))
-      )
-
-      add(SEC$robust, sprintf("STABILITY — %s — %s", lv, sp), verdict, "rb_sensitivity",
-          note = sprintf("per cut — %s. Estimate range %s to %s across cuts %s.",
-                         per_cut, f4(min(g$estimate, na.rm = TRUE)), f4(max(g$estimate, na.rm = TRUE)),
-                         paste(range(g$cut), collapse = "–")))
-    }
-  }
-
-  n_specs <- nrow(unique(d[, c("level", "spec")]))
-  add(SEC$robust, "Specifications whose SIGN changes across the sweep",
-      sprintf("%d of %d", n_sign_changes, n_specs), "rb_sensitivity",
-      note = sprintf("cuts swept: %s", paste(sort(unique(d$cut)), collapse = ", ")))
-  add(SEC$robust, "Specifications whose SIGNIFICANCE TIER changes across the sweep",
-      sprintf("%d of %d", n_sig_changes, n_specs), "rb_sensitivity",
-      note = paste("tier = the star the tables print (1%, 5%, 10%, n.s.).",
-                   "A tier change can be a precision effect rather than an estimate moving --",
-                   "the per-cut estimates are in the STABILITY rows above."))
-})
-
-guarded(SEC$robust, c("rb_sens_sizes"), list("Sweep sample sizes"), function() {
-  d <- readr::read_csv(inp_path("rb_sens_sizes"), show_col_types = FALSE, progress = FALSE)
-  for (i in seq_len(nrow(d)))
-    add(SEC$robust, sprintf("cut > %s — sample retained", d$cut[i]),
-        sprintf("municipalities %s, arrangements %s", n_fmt(d$n_mun_after[i]), n_fmt(d$n_arr_after[i])),
-        "rb_sens_sizes")
-})
-
-# ---- 6.9 Appendix descriptive statistics -------------------------------------
+# ---- 6.8 Appendix descriptive statistics -------------------------------------
 # The exhibit itself is the full table in output/; only the rows the manuscript
 # text is likely to quote are carried here, plus both blocks' N. Reproducing all
 # 17 variables x 8 statistics x 2 blocks x 2 levels would bury the file.

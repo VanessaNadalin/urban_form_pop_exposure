@@ -355,7 +355,6 @@ timestamp), L509–522.
 |---|---|
 | `tab_main_mun` | **Table 2** — municipalities, 4 columns: `g_high` × compact/sprawl, `Dpp_high` × compact/sprawl |
 | `tab_mediators_mun` | **ED Table 4** — with / without / mediators-only. The 2010 housing-market block `MEDIATORS_HM` (median rent, Palma ratios of rent and commute, vacant safe land Q1 and Q4 with the Q4 indicator, and the slum population share — added to the block 2026-09-30) is omitted in the no-mediator columns (5)–(8) via `CTRL_ALTA_NO_MED`; Table 2 and the mediators-only columns (9)–(10) use the full `CTRL_ALTA`. All 10 columns on Table 2's estimation sample: the no-mediator columns are fitted on `ds_mun_table2` (rows with `in_table2_sample == TRUE`, complete cases over every Table 2 variable), and a guard stops the script if any Table 2 / ED Table 4 column has a different N (2026-09-30) |
-| `tab_nomed_owncc_mun` | No exhibit; robustness only — ED Table 4's no-mediator columns on their own complete cases, as reported before 2026-09-30; read by `build_results_targets.R` |
 | `tab_appA_arr` | **ED Table 5** — functional urban areas, same 4 specs, HC3 |
 | `tab_horserace_mun` | **ED Table 3** — compact and sprawl entered jointly |
 | `tab_patha_mun` | No exhibit yet; reported in `results_targets_v2.md` — "path a": each 2010 housing-market mediator (Q1/Q4 vacant safe land, median rent, Palma ratios of rent and commute, favela share) on compact or sprawl growth 2000–2010; controls `CTRL_PATHA` (pre-2000 and time-invariant only); Table 2's sample and clustering |
