@@ -12,8 +12,9 @@ Pré-condições:
         suscet_inundacao_br.gpkg
     - risco.gdb é baixado automaticamente pelo script 01
 
-Estimated runtime (high susceptibility only): script 01 ~1-3h; script 03
-(full crossing) ~18-24h -- see PIPELINE.md. Roughly 20-28h for the stage.
+Estimated runtime (high susceptibility only): script 01 ~1-3h; scripts 03 and
+04 (full crossings) ~18-24h each -- see PIPELINE.md. Roughly 36-48h for the
+stage.
 """
 
 import subprocess
@@ -25,6 +26,7 @@ SCRIPTS = [
     "02_population_in_hazard_zones/01_download_prepare_ibge_grid.py",
     "02_population_in_hazard_zones/02_prepare_high_susceptibility_layer.py",
     "02_population_in_hazard_zones/03_cross_grid_high_susceptibility.py",
+    "02_population_in_hazard_zones/04_cross_grid_cprm_risk.py",
 ]
 
 def fmt_tempo(segundos):

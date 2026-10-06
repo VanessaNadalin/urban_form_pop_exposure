@@ -50,41 +50,38 @@ All outputs land in `data/processed_data/02_hazard_zones/`.
 | `AGSN_preparada.gpkg` | 01 | 03, 04 |
 | `grade_2010_BR.gpkg`, `grade_2022_BR.gpkg` | 01 | 03, 04 |
 | `grade_2010_pontos_BR.parquet`, `grade_2022_pontos_BR.parquet` | 01 | 03, 04 |
-| `risco_preparado.gpkg` | 01 | — (its only consumer, script 04, is not part of this deposit — see below) |
+| `risco_preparado.gpkg` | 01 | 04 — **and nothing in stage 03 any more** (see below) |
 | `susceptibilidade_unida.gpkg` | 02 | 03; stage 03 `01_define_sample.R` |
 | `grade_2010_BR_com_suscept_alta_agsn.gpkg` | 03 | stage 03 `03_integrate_grid_with_ghsl.R`; stage 04 `12_slum_growth.R` |
 | `grade_2022_BR_com_suscept_alta_agsn.gpkg` | 03 | same |
 | `AGSN_com_suscept_alta.gpkg`, `AGSN_sem_suscept_alta.gpkg` | 03 | — |
 | `resumo_municipal_suscept_alta_agsn.csv` | 03 | — (municipal summary, reference) |
+| `grade_2010_BR_com_risco_agsn.gpkg`, `grade_2022_BR_com_risco_agsn.gpkg` | 04 | — |
+| `AGSN_com_risco.gpkg`, `resumo_municipal_risco_agsn.csv` | 04 | — |
 
-### The CPRM risk crossing is not part of this deposit
+### The CPRM risk layer is still produced here; stage 03 no longer consumes it
 
-The exposure measure used throughout the paper is **SGB/CPRM high susceptibility**, not CPRM
-mapped risk. A fourth script in this stage, `04_cross_grid_cprm_risk.py`, crossed the population
-grid with the CPRM mapped-risk sectors; it is not included in the public repository, because no
-analysis in the paper consumes its outputs.
+`MIGRATION_PLAN.md` **6f.1** (decided 2026-09-13) retired stage 03's *consumption* of the CPRM
+mapped-risk layer, not its production. Nothing in this stage changed:
+`01_download_prepare_ibge_grid.py` still builds `risco_preparado.gpkg`, and
+`04_cross_grid_cprm_risk.py` still runs the full risk × grid crossing and writes its four
+outputs.
 
-`03_urban_footprint_and_growth_types/01_define_sample.R` once unioned the CPRM-risk
-municipalities into the exposed set; it is susceptibility-only (`01_define_sample.R:161–162`).
-`03_integrate_grid_with_ghsl.R` does not carry `prop_risco` / `prop_agsn_com_risco` onto the
-common grid (`:235`, `:390`), and `05_classify_growth_types.R` has no presence-check on those
-columns (`:165`). Stages 04 and 05 read no CPRM column at all.
-
-Two consequences a reader should know about. First, `01_download_prepare_ibge_grid.py` still
-downloads and prepares `risco_preparado.gpkg` (its Part E, below); that work is unused here, and
-Part E can be skipped without affecting any result. Second, one descriptive statistic in
-`manuscript/results_targets_v2.md` — the count of municipalities with CPRM mapped risk — was read
-from `resumo_municipal_risco_agsn.csv`, which script 04 produced. Regenerating the targets file
-from this repository reports that one line as PENDING with the reason "file not found" rather
-than substituting a value. No table, figure or regression in the paper depends on it. The
-stage-03 diagnostic `diagnostics/cprm_entrants_and_arrangement_denominators.R` reads
-`risco_preparado.gpkg` directly, not script 04's outputs, so it is unaffected.
+What changed is downstream. `03_urban_footprint_and_growth_types/01_define_sample.R` used to
+union the CPRM-risk municipalities into the exposed set; it is now susceptibility-only
+(`01_define_sample.R:161–162`). `03_integrate_grid_with_ghsl.R` no longer carries `prop_risco` /
+`prop_agsn_com_risco` onto the common grid (`:235`, `:390`), and `05_classify_growth_types.R`'s
+presence-check on those columns went with them (`:165`). Stages 04 and 05 never read a CPRM
+column at all. So **script 04's outputs currently have no live consumer** — they are kept
+because stage 02 is frozen and deposited, and because retiring a consumer is not a reason to
+stop producing a deposited layer.
 
 ### The exposure rule was area-weighted here all along
 
 Both crossing scripts weight population by the fraction of the cell inside the hazard polygon:
 
 - `03_cross_grid_high_susceptibility.py:391` — `pop_suscept = populacao × prop_suscept`
+- `04_cross_grid_cprm_risk.py:372` — `pop_risco = populacao × prop_risco`
 
 This has never been anything else in this stage. The "any-overlap" rule that
 `MIGRATION_PLAN.md` **6e** retired on 2026-09-11 lived in **stage 03**
@@ -123,8 +120,8 @@ From the **repository root**:
 python 02_population_in_hazard_zones/00_run_all.py
 ```
 
-`00_run_all.py` runs the three scripts in the order listed at `00_run_all.py:26–30`, times each
-one, and exits on the first non-zero return code.
+`00_run_all.py` runs the four scripts in the order listed at `00_run_all.py:25–30`, times each
+one, and exits on the first non-zero return code (`:59–64`).
 
 Individually:
 
@@ -132,10 +129,11 @@ Individually:
 python 02_population_in_hazard_zones/01_download_prepare_ibge_grid.py
 python 02_population_in_hazard_zones/02_prepare_high_susceptibility_layer.py
 python 02_population_in_hazard_zones/03_cross_grid_high_susceptibility.py
+python 02_population_in_hazard_zones/04_cross_grid_cprm_risk.py
 ```
 
-**Runtime** (`00_run_all.py:14–16`): script 01 ~1–3 h; script 03 ~18–24 h; ~20–28 h for the
-stage as deposited here. The crossing script has no skip-if-already-computed logic on its
+**Runtime** (`00_run_all.py:15–17`): script 01 ~1–3 h; scripts 03 and 04 ~18–24 h **each**;
+~36–48 h+ for the whole stage. Neither crossing script has skip-if-already-computed logic on its
 expensive outputs, so a re-run is a full re-run.
 
 **Memory**: combining all grid tiles for Brazil needs ~8–16 GB of RAM
@@ -153,7 +151,7 @@ that bar.
 The IBGE statistical grid is **mixed resolution** — roughly 200 m cells in denser areas and 1 km
 cells elsewhere. No script here assumes one size: every proportion is computed against the
 cell's own measured area (`area_total = g.geometry.area`,
-`03_cross_grid_high_susceptibility.py:150`), and downstream
+`03_cross_grid_high_susceptibility.py:150`, `04_cross_grid_cprm_risk.py:161`), and downstream
 density criteria are per km² for the same reason (`04_delimit_urban_extent.R:15–20`). Any
 statement that this pipeline works on "200 m × 200 m cells" is wrong; the previous version of
 this file said so throughout.
@@ -350,12 +348,42 @@ into the municipal summary. Anything wanting per-cell exposed population compute
 
 ---
 
-## Script 04 — not included in this deposit
+## Script 04 — `04_cross_grid_cprm_risk.py`
 
-`04_cross_grid_cprm_risk.py` applied script 03's method to the CPRM mapped-risk layer instead of
-the susceptibility layer. It is not part of the public repository, for the reasons given under
-"The CPRM risk crossing is not part of this deposit" above. Nothing documented below, and no
-result in the paper, depends on it.
+The same method applied to the CPRM mapped-risk layer. Alto and Muito alto were already merged
+by script 01's filter; this script dissolves all remaining grades into one geometry per
+municipality and treats risk as a single layer.
+
+**Reads.** `risco_preparado.gpkg` (L69), `malha_municipal_5880.gpkg` (L108),
+`AGSN_preparada.gpkg` (L125), both grids and both point parquets (L164–183).
+
+**Differences from script 03**, beyond the layer:
+
+- `risco` is dissolved by `cd_geocmun` before the loop (L81–86), rather than arriving
+  pre-dissolved from its own preparation script.
+- `FILTRO_UF` (L49) restricts the run to one UF by code prefix for testing; **`None` for a full
+  run**, which is its committed value.
+- `MIN_AREA_OVERLAP = 1.0` m² (L146): an AGSN ∩ risk intersection smaller than this is ignored
+  (L304).
+- AGSN handling is arranged differently: the **total** AGSN fraction is accumulated for every
+  polygon regardless of risk (L295–296), and only the intersection with risk is accumulated
+  separately (L300–308). `prop_agsn_sem_risco` is then **derived by subtraction**, clipped at 0
+  (L328) — where script 03 computes its "without" fraction from an explicit `difference()`
+  geometry.
+- The municipality loop iterates `sorted(municipios_com_risco & set(malha_dict))` (L234).
+
+`encontrar_celulas_mun()` (L188–198), `clip_proporcoes()` (L201–222, same 1.0 cap at L221) and
+`acumular()` (L225–228) are identical to script 03's, including the same core+border attribution
+and the same first-writer-wins rule (L271–276).
+
+**Outputs.** `grade_2010_BR_com_risco_agsn.gpkg`, `grade_2022_BR_com_risco_agsn.gpkg`
+(L342–347), with columns `prop_risco`, `cod_mun_risco`, `prop_agsn_com_risco`, `prop_agsn`,
+`prop_agsn_sem_risco` (L320–329); `AGSN_com_risco.gpkg` (L360–361); and
+`resumo_municipal_risco_agsn.csv` (L395–396) with, per year, `pop_total`, `pop_risco`
+(= `sum(populacao × prop_risco)`, L372), `pop_agsn`, `pop_agsn_com_risco` and the derived
+`pop_agsn_sem_risco` (L383).
+
+As stated above, **none of these four outputs currently has a live consumer** (6f.1).
 
 ---
 
@@ -363,8 +391,8 @@ result in the paper, depends on it.
 
 - **CRS: EPSG:5880** (SIRGAS 2000 / Brazil Polyconic) for every overlay and every area
   calculation — `01_download_prepare_ibge_grid.py:36`,
-  `02_prepare_high_susceptibility_layer.py:27`, `03_cross_grid_high_susceptibility.py:48`.
-  Layers arriving in another CRS are reprojected on read.
+  `02_prepare_high_susceptibility_layer.py:27`, `03_cross_grid_high_susceptibility.py:48`,
+  `04_cross_grid_cprm_risk.py:43`. Layers arriving in another CRS are reprojected on read.
 - **Geometry repair: `make_valid()` → `buffer(0)` → `make_valid()`**, in that order, applied to
   the mesh, the FCU polygons, both grids and the risk layer
   (`01_download_prepare_ibge_grid.py:175–177`, `:216–218`, `:287–289`, `:484–486`). The
@@ -381,7 +409,7 @@ result in the paper, depends on it.
 | Dataset | Provider | Year | Notes |
 |---|---|---|---|
 | Susceptibility, high class (flood + mass movement) | SGB/CPRM | various | From stage 01; placed by hand in `data/raw_data/02_hazard_zones/` |
-| Mapped risk sectors (`risco.gdb`) | SGB/CPRM | various | Auto-downloaded by script 01; filtered to `grau_risco ∈ {Alto, Muito alto}`. Unused in this deposit — see "The CPRM risk crossing is not part of this deposit" |
+| Mapped risk sectors (`risco.gdb`) | SGB/CPRM | various | Auto-downloaded by script 01; filtered to `grau_risco ∈ {Alto, Muito alto}` |
 | Statistical grid | IBGE | 2010, 2022 | Mixed resolution — see the note above |
 | Municipal mesh | IBGE | 2022 | `BR_Municipios_2022.shp` |
 | Favelas e Comunidades Urbanas (FCU) | IBGE Censo 2022 | 2022 | `poligonos_FCUs_shp.zip`; `cd_mun` used directly |
