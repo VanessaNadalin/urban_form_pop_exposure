@@ -94,8 +94,8 @@ archives from RIGEO, and expects a working directory holding those files and the
 
 > **The dissolved national susceptibility layer that stage 01 produces, and that stage 02 needs,
 > will be part of the data deposit described under "Data availability".** Place
-> `suscet_inundacao_br.gpkg` and `suscet_massa_br.gpkg` in `data/raw_data/02_hazard_zones/` to
-> run stage 02 without re-scraping.
+> `suscet_inundacao_br.gpkg` and `suscet_massa_br.gpkg` in `data/raw_data/02_hazard_zones/`
+> (create the folder) to run stage 02 without re-scraping.
 
 **Stage 02 is runnable but very expensive.** Each of its two grid × hazard crossings (high
 susceptibility, and CPRM mapped risk) takes roughly 18–24 h, about 36–48 h for the stage; it needs
@@ -126,10 +126,13 @@ are where every published table and figure is produced.
 05_exhibits/                        stage 05
 R/paths.R                           the single place data paths are defined
 R/docx_tables.R                     the shared Word (.docx) format of the tables
-data/raw_data/, data/processed_data/  inputs and intermediates (empty here; see below)
-output/                             final tables and figures (written by stage 05; empty here)
 manuscript/results_targets_v2.md    the generated source for every number
 ```
+
+Two folders are not in the repository and are created by the scripts on first use:
+`data/raw_data/<stage>/` and `data/processed_data/<stage>/` (inputs and intermediates; see "Data
+availability") and `output/` (the final tables and figures, written by stage 05). Both are
+excluded from version control by `.gitignore`.
 
 The deposit holds only the scripts that produce the paper's exhibits and the numbers it reports.
 Diagnostic and robustness scripts (the stages' `diagnostics/` folders and `05_exhibits/robustness/`)

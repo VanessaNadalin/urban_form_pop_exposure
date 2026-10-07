@@ -1,18 +1,11 @@
 # ---------------------------------------------------------------------------
-# Data files are not distributed in this repository. The pipeline writes into
-# data/raw_data/ and data/processed_data/; both stay empty here except for a
-# placeholder, so that a clean clone has the directory structure the scripts
-# expect. See README.md, "Data availability".
+# Neither data nor results are distributed in this repository. The pipeline
+# creates data/ (inputs and intermediates) and output/ (final tables and
+# figures) on first use; both stay out of version control. See README.md,
+# "Data availability".
 # ---------------------------------------------------------------------------
-data/raw_data/*
-data/processed_data/*
-!data/raw_data/.gitkeep
-!data/processed_data/.gitkeep
-
-# output/ holds the final tables and figures. Its file types (.csv, .png,
-# .pdf, .html, .tex) are excluded everywhere else in this file, so it needs an
-# explicit carve-out at the end.
-!output/.gitkeep
+data/
+output/
 
 # Python
 __pycache__/
@@ -69,9 +62,6 @@ rsconnect/
 # Stage 01's municipality-name -> IBGE-code lookup, a small input the stage
 # cannot run without (see 01_download_susceptibility_maps/making_suscep_national.md).
 !01_download_susceptibility_maps/suc_codemun.xlsx
-
-# Must come after the exclusion patterns above to override them.
-!output/**
 
 # pkgdown site
 docs/
