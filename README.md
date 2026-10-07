@@ -14,7 +14,7 @@ GHSL built-up surface (2000, 2010, 2020), combined at the level of municipalitie
 functional urban areas.
 
 **Exposure is defined on high susceptibility only**, and area-weighted: a grid cell contributes
-`population × (fraction of the cell inside the hazard polygon)`, not its whole population.
+`population × (fraction of the cell inside the hazard polygon)`.
 
 ---
 
